@@ -1,7 +1,7 @@
 services:
   repomarks:
     build: .
-    image: repomarks:latest
+    image: ghcr.io/repomarks/repomarks:latest
     container_name: repomarks
     restart: unless-stopped
     ports:

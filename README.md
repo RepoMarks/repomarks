@@ -62,13 +62,34 @@ npm start
 
 ### 3. Docker 部署（推荐）
 
+直接使用已发布的镜像（amd64 / arm64）：
+
 ```bash
 cp .env.example .env
 # 编辑 .env 填仓库信息
+docker compose up -d
+```
+
+或从源码构建：
+
+```bash
 docker compose up -d --build
 ```
 
+也可以不用 compose：
+
+```bash
+docker run -d --name repomarks -p 3000:3000 \
+  -e REPO_URL=https://github.com/you/link-data.git \
+  -e GIT_TOKEN=github_pat_xxx \
+  -e AUTH_PASSWORD=your-password \
+  -v "$PWD/data:/data" \
+  ghcr.io/repomarks/repomarks:latest
+```
+
 镜像基于 Alpine，自带 `git` 和 `chromium`，网页存档默认就是完整存档模式，数据目录挂载在 `./data`。
+
+镜像标签：`latest`（最新 release）、`vX.Y.Z` / `vX.Y`（版本号）、`main`、`sha-xxxxxxxx`。
 
 ## 获取访问令牌
 
@@ -186,6 +207,21 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 - **无浏览器时**：轻量存档的内联质量有限，复杂的 SPA 页面效果一般；Docker 镜像已内置 chromium
 - **冲突合并**：按 `updatedAt` 新者胜，同一字段在两端的并发修改不会逐字段合并
 - 抓取目标站点的反爬（403/验证码）会导致元数据或存档失败，界面会显示失败原因
+
+## 发布流程（CI/CD）
+
+- **CI**（`.github/workflows/ci.yml`）：PR 上自动跑类型检查、构建、冒烟测试，并验证 Dockerfile 能构建
+- **发布**（`.github/workflows/docker.yml`）：
+  - push 到 `main`：跑测试后构建 `linux/amd64` 镜像，打上 `main` 和 `sha-xxxxxxx` 标签
+  - push `v*` 标签：构建 `linux/amd64` + `linux/arm64` 多架构镜像，打上 `vX.Y.Z`、`vX.Y`、`vX` 和 `latest` 标签
+  - 也可以在 Actions 页面手动触发（workflow_dispatch）
+
+发版只需：
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
 
 ## License
 
