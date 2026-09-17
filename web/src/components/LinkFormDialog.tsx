@@ -27,6 +27,7 @@ export default function LinkFormDialog({
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [icon, setIcon] = useState(initial?.icon ?? '');
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [collectionId, setCollectionId] = useState(initial?.collectionId ?? defaultCollectionId ?? '');
   const [pinned, setPinned] = useState(Boolean(initial?.pinned));
@@ -79,6 +80,7 @@ export default function LinkFormDialog({
           title,
           description,
           notes,
+          icon,
           tags,
           collectionId: collectionId || null,
           pinned,
@@ -89,6 +91,7 @@ export default function LinkFormDialog({
           title: title || undefined,
           description: description || undefined,
           notes,
+          icon: icon || null,
           tags,
           collectionId: collectionId || null,
           pinned,
@@ -177,6 +180,16 @@ export default function LinkFormDialog({
           value={notes}
           placeholder="自己的笔记、摘录…"
           onChange={(event) => setNotes(event.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label>自定义图标（可选）</label>
+        <input
+          type="text"
+          value={icon}
+          placeholder="留空使用网站 favicon，可填入图标图片 URL"
+          onChange={(event) => setIcon(event.target.value)}
         />
       </div>
 

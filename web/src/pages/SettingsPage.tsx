@@ -225,6 +225,21 @@ export default function SettingsPage() {
           </div>
 
           <div className="panel">
+            <h3>AI 标签（可选）</h3>
+            <dl className="kv">
+              <dt>状态</dt>
+              <dd>{status.ai.enabled ? `已启用（模型 ${status.ai.model}）` : '未配置'}</dd>
+            </dl>
+            {!status.ai.enabled && (
+              <div className="field-hint" style={{ marginTop: 10 }}>
+                在 .env 中配置 AI_BASE_URL（OpenAI 兼容接口，如
+                https://api.openai.com/v1，或本地 Ollama 的
+                http://host.docker.internal:11434/v1）、AI_MODEL 和可选的 AI_API_KEY，重启后即可在链接详情页生成标签与摘要。
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
             <h3>数据统计</h3>
             <dl className="kv">
               <dt>链接</dt>

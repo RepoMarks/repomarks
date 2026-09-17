@@ -3,8 +3,21 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useCollections, useStatus, useTags } from '../hooks';
+import { useThemeMode, type ThemeMode } from '../theme';
 import CollectionDialog from './CollectionDialog';
 import type { Collection } from '../types';
+
+function nextTheme(mode: ThemeMode): ThemeMode {
+  if (mode === 'dark') return 'light';
+  if (mode === 'light') return 'system';
+  return 'dark';
+}
+
+const THEME_LABELS: Record<ThemeMode, string> = {
+  dark: '深色主题',
+  light: '浅色主题',
+  system: '跟随系统',
+};
 
 function CollectionTree({
   collections,
@@ -35,7 +48,18 @@ function CollectionTree({
                 onClick={() => onSelect(collection.id)}
                 title={collection.name}
               >
-                <span className="nav-dot" style={{ background: collection.color || '#5b8def' }} />
+                {collection.icon ? (
+                  <img
+                    className="nav-icon"
+                    src={`/api/favicon?url=${encodeURIComponent(collection.icon)}`}
+                    alt=""
+                  />
+                ) : (
+                  <span
+                    className="nav-dot"
+                    style={{ background: collection.color || '#5b8def' }}
+                  />
+                )}
                 <span className="site-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {collection.name}
                 </span>
@@ -77,6 +101,7 @@ export default function Sidebar({ open }: { open: boolean }) {
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Collection | null>(null);
+  const [themeMode, setThemeMode] = useThemeMode();
 
   const collectionId = params.get('collection') ?? '';
   const tag = params.get('tag') ?? '';
@@ -263,6 +288,16 @@ export default function Sidebar({ open }: { open: boolean }) {
         >
           <span className="nav-dot" style={{ background: '#29a4b8' }} />
           仓库与状态
+        </button>
+        <button className="nav-item" onClick={() => setThemeMode(nextTheme(themeMode))}>
+          <span
+            className="nav-dot"
+            style={{
+              background:
+                themeMode === 'dark' ? '#5b8def' : themeMode === 'light' ? '#e8a33d' : '#9b6ee0',
+            }}
+          />
+          {THEME_LABELS[themeMode]}
         </button>
         <button
           className="nav-item"

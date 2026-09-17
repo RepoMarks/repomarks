@@ -114,6 +114,12 @@ export const api = {
 
   archiveLink: (id: string) => request<LinkRecord>(`/links/${id}/archive`, { method: 'POST' }),
 
+  suggestAi: (id: string, apply = false) =>
+    request<{ tags: string[]; summary: string; applied: boolean }>(`/links/${id}/ai`, {
+      method: 'POST',
+      body: JSON.stringify({ apply }),
+    }),
+
   metadata: (url: string) =>
     request<MetadataPreview>(`/metadata?url=${encodeURIComponent(url)}`),
 
@@ -134,8 +140,12 @@ export const api = {
 
   listCollections: () => request<Collection[]>('/collections'),
 
-  createCollection: (input: { name: string; parentId?: string | null; color?: string }) =>
-    request<Collection>('/collections', { method: 'POST', body: JSON.stringify(input) }),
+  createCollection: (input: {
+    name: string;
+    parentId?: string | null;
+    color?: string;
+    icon?: string;
+  }) => request<Collection>('/collections', { method: 'POST', body: JSON.stringify(input) }),
 
   updateCollection: (
     id: string,
@@ -143,6 +153,7 @@ export const api = {
       name?: string;
       parentId?: string | null;
       color?: string;
+      icon?: string;
       isPublic?: boolean;
       description?: string;
     }
@@ -180,6 +191,7 @@ export function archiveFormatUrl(
 }
 
 export function faviconSrc(link: LinkRecord): string | null {
+  if (link.icon) return `/api/favicon?url=${encodeURIComponent(link.icon)}`;
   if (link.favicon) return `/api/favicon?url=${encodeURIComponent(link.favicon)}`;
   try {
     const origin = new URL(link.url).origin;

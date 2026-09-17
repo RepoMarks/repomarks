@@ -16,9 +16,14 @@
   - `screenshot`：全页截图 PNG（需要 Chrome/Chromium）
   - `pdf`：打印为 PDF（需要 Chrome/Chromium）
   - `wayback`：提交到 Wayback Machine 并保存快照地址（可选，`ARCHIVE_WAYBACK=true`）
+- **阅读视图 + 高亮批注**：正文提取后可直接阅读，选中文字高亮、写批注，点击可定位回原文
+- **批量操作**：多选后批量打标签 / 移入收藏夹 / 置顶 / 抓取存档 / 删除
+- **公开分享**：收藏夹一键公开，生成只读分享页和 RSS 订阅源（可随时关闭）
+- **API 密钥**：为浏览器扩展（仓库内 `extension/`）和脚本等第三方客户端提供访问令牌
+- **可选 AI**：对接任意 OpenAI 兼容接口（本地 Ollama 或云端），一键生成标签与摘要
 - 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
 - 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`
-- 单用户密码登录（`AUTH_PASSWORD`）
+- 单用户密码登录（`AUTH_PASSWORD`）；深色 / 浅色 / 跟随系统主题，支持 PWA 安装，链接和收藏夹可自定义图标
 - 后台定时同步 + 写入后自动推送；多端同时修改时按 id 做语义合并（更新时间新者胜）
 
 ## 工作原理
@@ -185,6 +190,10 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `ARCHIVE_BROWSER_PATH` | 自动探测 | Chrome/Chromium 可执行文件路径 |
 | `ARCHIVE_BROWSER_ARGS` | - | 浏览器启动参数，逗号分隔（Docker 中为 `--no-sandbox,--disable-dev-shm-usage`） |
 | `ARCHIVE_TIMEOUT` | `90000` | 单次存档超时（毫秒） |
+| `AI_BASE_URL` | - | OpenAI 兼容接口地址（如 `https://api.openai.com/v1`），留空则关闭 AI 功能 |
+| `AI_API_KEY` | - | AI 接口密钥（本地 Ollama 可不填） |
+| `AI_MODEL` | - | 模型名，如 `gpt-4o-mini` 或 `llama3.1` |
+| `AI_TIMEOUT` | `30000` | AI 请求超时（毫秒） |
 | `ALLOW_PRIVATE_URLS` | `false` | 是否允许抓取内网地址（默认禁止，防 SSRF） |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | 提交作者信息 |
 

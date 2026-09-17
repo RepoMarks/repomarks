@@ -33,6 +33,8 @@ export default function LinkDetailPage() {
   const [selectedText, setSelectedText] = useState('');
   const [highlightColor, setHighlightColor] = useState('yellow');
   const [highlightTarget, setHighlightTarget] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<{ tags: string[]; summary: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -65,6 +67,19 @@ export default function LinkDetailPage() {
       window.alert((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runAi = async () => {
+    if (!link) return;
+    setAiBusy(true);
+    try {
+      const result = await api.suggestAi(link.id, false);
+      setAiResult({ tags: result.tags, summary: result.summary });
+    } catch (err) {
+      window.alert((err as Error).message);
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -233,6 +248,9 @@ export default function LinkDetailPage() {
             <button className="btn" disabled={busy} onClick={() => void run(() => api.refetchLink(link.id))}>
               重新抓取元数据
             </button>
+            <button className="btn" disabled={aiBusy} onClick={() => void runAi()}>
+              {aiBusy ? 'AI 生成中…' : 'AI 标签与摘要'}
+            </button>
             <button className="btn" onClick={() => setEditing(true)}>
               编辑
             </button>
@@ -358,6 +376,41 @@ export default function LinkDetailPage() {
               {Object.entries(link.formatErrors)
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('；')}
+            </div>
+          )}
+
+          {aiResult && (
+            <div className="panel">
+              <h3>AI 建议</h3>
+              {aiResult.tags.length > 0 && (
+                <div className="card-tags">
+                  {aiResult.tags.map((tag) => (
+                    <span className="mini-tag" key={tag}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {aiResult.summary && (
+                <p style={{ margin: '10px 0 0' }}>{aiResult.summary}</p>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button
+                  className="btn primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api.suggestAi(link.id, true);
+                      setAiResult(null);
+                    })
+                  }
+                >
+                  应用（合并标签、补全描述）
+                </button>
+                <button className="btn" onClick={() => setAiResult(null)}>
+                  忽略
+                </button>
+              </div>
             </div>
           )}
 

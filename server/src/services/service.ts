@@ -135,6 +135,7 @@ export class DataService {
     repo: RepoStatus;
     sync: SyncState;
     archive: ArchiveAvailability;
+    ai: { enabled: boolean; model: string | null };
     stats: ReturnType<LinkStore['stats']>;
     warnings: string[];
     uptimeSeconds: number;
@@ -145,6 +146,7 @@ export class DataService {
       repo,
       sync: this.syncState,
       archive: this.archiveAvailability(),
+      ai: { enabled: this.aiEnabled, model: this.config.aiModel || null },
       stats: this.store.stats(),
       warnings: this.store.warnings.slice(0, 50),
       uptimeSeconds: Math.round((Date.now() - this.startTime) / 1000),
@@ -245,6 +247,7 @@ export class DataService {
         updatedAt: now,
         siteName: meta?.siteName ?? hostnameOf(url),
         favicon: meta?.favicon,
+        icon: input.icon?.trim().slice(0, 2000) || null,
         previewImage: meta?.previewImage,
         contentType: meta?.contentType,
         notes: input.notes ?? '',
@@ -281,6 +284,9 @@ export class DataService {
         updated.collectionId = patch.collectionId ?? null;
       }
       if (patch.notes !== undefined) updated.notes = patch.notes.slice(0, 20000);
+      if (patch.icon !== undefined) {
+        updated.icon = patch.icon ? patch.icon.trim().slice(0, 2000) : null;
+      }
       if (patch.pinned !== undefined) updated.pinned = patch.pinned;
       updated.updatedAt = new Date().toISOString();
 
@@ -325,6 +331,110 @@ export class DataService {
       this.schedulePush();
       return updated;
     });
+  }
+
+  // ---------------------------------------------------------------- AI 标签
+
+  get aiEnabled(): boolean {
+    return Boolean(this.config.aiBaseUrl && this.config.aiModel);
+  }
+
+  async aiSuggest(
+    id: string,
+    apply = false
+  ): Promise<{ tags: string[]; summary: string; applied: boolean }> {
+    if (!this.aiEnabled) {
+      throw new HttpError(400, '未配置 AI：请设置 AI_BASE_URL 与 AI_MODEL');
+    }
+    const link = this.requireLink(id);
+
+    let excerpt = '';
+    if (link.readablePath) {
+      try {
+        const gzipped = await fsp.readFile(this.store.abs(link.readablePath));
+        excerpt = (await gunzipHtml(gzipped)).slice(0, 4000);
+      } catch {
+        /* 忽略，仅用元数据 */
+      }
+    }
+
+    const prompt = [
+      `Title: ${link.title}`,
+      `URL: ${link.url}`,
+      link.description ? `Description: ${link.description}` : '',
+      excerpt ? `Content:\n${excerpt}` : '',
+      '',
+      'Task: suggest 3-6 short tags (same language as the content) and a one-sentence summary.',
+      'Reply with JSON only, in this shape: {"tags": ["tag1", "tag2"], "summary": "..."}',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.aiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.config.aiApiKey ? { authorization: `Bearer ${this.config.aiApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: this.config.aiModel,
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content: 'You organize bookmarks. Always answer with valid JSON only.',
+            },
+            { role: 'user', content: prompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(this.config.aiTimeoutMs),
+      });
+    } catch (err) {
+      throw new HttpError(502, `AI 请求失败: ${(err as Error).message}`);
+    }
+    if (!response.ok) {
+      throw new HttpError(502, `AI 请求失败: HTTP ${response.status}`);
+    }
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content ?? '';
+    let parsed: { tags?: unknown; summary?: unknown } = {};
+    try {
+      const cleaned = content
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      parsed = JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      throw new HttpError(502, 'AI 返回内容无法解析为 JSON');
+    }
+
+    const tags = normalizeTags(parsed.tags);
+    const summary = typeof parsed.summary === 'string' ? parsed.summary.slice(0, 1000) : '';
+
+    let applied = false;
+    if (apply && (tags.length > 0 || summary)) {
+      await this.mutex.run(async () => {
+        const current = this.store.findById(id);
+        if (!current) return;
+        const updated: LinkRecord = {
+          ...current,
+          tags: normalizeTags([...current.tags, ...tags]),
+          description: current.description?.trim() ? current.description : summary,
+          updatedAt: new Date().toISOString(),
+        };
+        const changed = await this.store.putLink(updated);
+        await this.repo.commit(changed, `ai: suggest ${shorten(current.title)}`);
+        this.schedulePush();
+        applied = true;
+      });
+    }
+    return { tags, summary, applied };
   }
 
   // ---------------------------------------------------------------- 批量操作
@@ -718,7 +828,12 @@ export class DataService {
 
   // ---------------------------------------------------------------- 收藏夹
 
-  async createCollection(input: { name: string; color?: string; parentId?: string | null }): Promise<Collection> {
+  async createCollection(input: {
+    name: string;
+    color?: string;
+    icon?: string;
+    parentId?: string | null;
+  }): Promise<Collection> {
     const name = input.name?.trim();
     if (!name) throw new HttpError(400, '收藏夹名称不能为空');
     this.requireCollection(input.parentId);
@@ -728,6 +843,7 @@ export class DataService {
         id: ulid(),
         name: name.slice(0, 200),
         color: input.color?.trim() || pickColor(name),
+        icon: input.icon?.trim().slice(0, 2000) || '',
         parentId: input.parentId ?? null,
         isPublic: false,
         slug: '',
@@ -748,6 +864,7 @@ export class DataService {
     patch: {
       name?: string;
       color?: string;
+      icon?: string;
       parentId?: string | null;
       isPublic?: boolean;
       description?: string;
@@ -763,6 +880,7 @@ export class DataService {
         updated.name = name.slice(0, 200);
       }
       if (patch.color !== undefined) updated.color = patch.color.trim();
+      if (patch.icon !== undefined) updated.icon = patch.icon.trim().slice(0, 2000);
       if (patch.parentId !== undefined) {
         if (patch.parentId === id) throw new HttpError(400, '收藏夹不能作为自己的上级');
         this.requireCollection(patch.parentId);

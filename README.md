@@ -18,7 +18,11 @@ The service clones your data repository locally, reads and writes plain files, a
   - `wayback` — submit the page to the Wayback Machine and store the snapshot URL (opt-in)
 - Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports (including Linkwarden); folders become collections and duplicate URLs are skipped
 - Export everything as JSON; all data files are human-readable and can be edited by hand before `git push`
-- Single-user password authentication
+- Optional AI tagging: suggest tags and a one-sentence summary through any OpenAI-compatible API (local Ollama or a hosted provider), then apply with one click
+- Single-user password authentication, plus API keys for the bundled browser extension and other third-party clients
+- Public collection sharing with a read-only page and RSS feed
+- Bulk actions (tags, collection, pin, preserve, delete), highlights and annotations in the reader view
+- Dark / light / system theme, PWA-installable, custom icons for links and collections
 - Background sync and automatic push after writes; concurrent edits are merged semantically (newest `updatedAt` wins)
 
 ## How it works
@@ -188,6 +192,10 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `ARCHIVE_BROWSER_PATH` | auto-detected | Path to Chrome/Chromium (for full archives and screenshots/PDFs) |
 | `ARCHIVE_BROWSER_ARGS` | - | Extra browser arguments, comma-separated (`--no-sandbox,--disable-dev-shm-usage` in Docker) |
 | `ARCHIVE_TIMEOUT` | `90000` | Timeout per preservation operation in milliseconds |
+| `AI_BASE_URL` | - | OpenAI-compatible API base URL (e.g. `https://api.openai.com/v1`); leave empty to disable AI features |
+| `AI_API_KEY` | - | API key for the AI provider (optional for local Ollama) |
+| `AI_MODEL` | - | Model name, e.g. `gpt-4o-mini` or `llama3.1` |
+| `AI_TIMEOUT` | `30000` | AI request timeout in milliseconds |
 | `ALLOW_PRIVATE_URLS` | `false` | Allow fetching private/internal addresses (disabled to prevent SSRF) |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | Commit author for data repository commits |
 

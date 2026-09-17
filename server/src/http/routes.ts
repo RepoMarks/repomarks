@@ -114,6 +114,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
         tags: Array.isArray(req.body?.tags) ? req.body.tags : undefined,
         collectionId: req.body?.collectionId === undefined ? undefined : req.body.collectionId,
         notes: str(req.body?.notes),
+        icon: req.body?.icon === undefined ? undefined : (str(req.body.icon) ?? null),
         pinned: typeof req.body?.pinned === 'boolean' ? req.body.pinned : undefined,
         fetchMetadata: req.body?.fetchMetadata !== false,
       });
@@ -149,6 +150,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
       for (const key of ['url', 'title', 'description', 'notes'] as const) {
         if (req.body?.[key] !== undefined) patch[key] = String(req.body[key]);
       }
+      if (req.body?.icon !== undefined) patch.icon = str(req.body.icon) ?? null;
       if (Array.isArray(req.body?.tags)) patch.tags = req.body.tags;
       if (req.body?.collectionId !== undefined) patch.collectionId = req.body.collectionId;
       if (typeof req.body?.pinned === 'boolean') patch.pinned = req.body.pinned;
@@ -169,6 +171,13 @@ export function createRouter(service: DataService, auth: Auth): Router {
     '/links/:id/refetch',
     wrap(async (req, res) => {
       res.json(await service.refetchLink(req.params.id));
+    })
+  );
+
+  router.post(
+    '/links/:id/ai',
+    wrap(async (req, res) => {
+      res.json(await service.aiSuggest(req.params.id, req.body?.apply === true));
     })
   );
 
@@ -299,6 +308,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
       const collection = await service.createCollection({
         name: requireString(req.body?.name, 'name'),
         color: str(req.body?.color),
+        icon: str(req.body?.icon),
         parentId: req.body?.parentId ?? null,
       });
       res.status(201).json(collection);
@@ -311,6 +321,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
       const collection = await service.updateCollection(req.params.id, {
         name: str(req.body?.name),
         color: str(req.body?.color),
+        icon: str(req.body?.icon),
         parentId: req.body?.parentId === undefined ? undefined : req.body.parentId,
         isPublic: typeof req.body?.isPublic === 'boolean' ? req.body.isPublic : undefined,
         description: str(req.body?.description),

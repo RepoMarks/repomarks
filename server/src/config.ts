@@ -43,6 +43,10 @@ export interface Config {
   shardSize: number;
   syncIntervalMs: number;
   fetchTimeoutMs: number;
+  aiBaseUrl: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiTimeoutMs: number;
   archiveEngine: ArchiveEngine;
   archiveFormats: ArchiveFormat[];
   archiveWayback: boolean;
@@ -85,6 +89,10 @@ export function loadConfig(): Config {
     shardSize: Math.max(100, num('SHARD_SIZE', 1000)),
     syncIntervalMs: Math.max(0, num('SYNC_INTERVAL', 60)) * 1000,
     fetchTimeoutMs: num('FETCH_TIMEOUT', 15000),
+    aiBaseUrl: str('AI_BASE_URL'),
+    aiApiKey: str('AI_API_KEY'),
+    aiModel: str('AI_MODEL'),
+    aiTimeoutMs: num('AI_TIMEOUT', 30000),
     archiveEngine: (str('ARCHIVE_ENGINE', 'auto') as ArchiveEngine) ?? 'auto',
     archiveFormats: str('ARCHIVE_FORMATS', 'html,readable,screenshot,pdf')
       .split(',')

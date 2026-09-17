@@ -20,6 +20,7 @@ export default function CollectionDialog({
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description ?? '');
   const [parentId, setParentId] = useState(collection.parentId ?? '');
+  const [icon, setIcon] = useState(collection.icon ?? '');
   const [isPublic, setIsPublic] = useState(Boolean(collection.isPublic));
   const [slug, setSlug] = useState(collection.slug ?? '');
   const [busy, setBusy] = useState(false);
@@ -58,6 +59,7 @@ export default function CollectionDialog({
       const updated = await api.updateCollection(collection.id, {
         name,
         description,
+        icon,
         parentId: parentId || null,
         isPublic,
       });
@@ -97,6 +99,16 @@ export default function CollectionDialog({
           value={description}
           placeholder="公开分享页会显示这段描述"
           onChange={(event) => setDescription(event.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label>自定义图标（可选）</label>
+        <input
+          type="text"
+          value={icon}
+          placeholder="图标图片 URL，留空显示颜色圆点"
+          onChange={(event) => setIcon(event.target.value)}
         />
       </div>
 

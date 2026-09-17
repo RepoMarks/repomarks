@@ -9,6 +9,7 @@ export interface LinkRecord {
   updatedAt: string;
   siteName?: string;
   favicon?: string;
+  icon?: string | null;
   previewImage?: string;
   contentType?: string;
   pinned?: boolean;
@@ -43,6 +44,7 @@ export interface Collection {
   id: string;
   name: string;
   color?: string;
+  icon?: string;
   parentId?: string | null;
   isPublic?: boolean;
   slug?: string;
@@ -91,6 +93,7 @@ export interface LinkInput {
   tags?: string[];
   collectionId?: string | null;
   notes?: string;
+  icon?: string | null;
   pinned?: boolean;
   fetchMetadata?: boolean;
 }
