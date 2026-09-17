@@ -313,9 +313,12 @@ export class LinkStore {
     }
     if (tokens.length > 0) {
       items = items.filter((link) => {
+        const highlights = (link.highlights ?? [])
+          .map((item) => `${item.text} ${item.note ?? ''}`)
+          .join(' ');
         const haystack = `${link.title}\n${link.url}\n${link.description ?? ''}\n${
           link.siteName ?? ''
-        }\n${link.tags.join(' ')}\n${link.notes ?? ''}`.toLowerCase();
+        }\n${link.tags.join(' ')}\n${link.notes ?? ''}\n${highlights}`.toLowerCase();
         return tokens.every((token) => haystack.includes(token));
       });
     }

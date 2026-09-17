@@ -189,6 +189,38 @@ export function createRouter(service: DataService, auth: Auth): Router {
     })
   );
 
+  router.post(
+    '/links/:id/highlights',
+    wrap(async (req, res) => {
+      const link = await service.addHighlight(req.params.id, {
+        text: requireString(req.body?.text, 'text'),
+        note: str(req.body?.note),
+        color: str(req.body?.color),
+      });
+      res.status(201).json(link);
+    })
+  );
+
+  router.patch(
+    '/links/:id/highlights/:highlightId',
+    wrap(async (req, res) => {
+      const link = await service.updateHighlight(req.params.id, req.params.highlightId, {
+        note: str(req.body?.note),
+        color: str(req.body?.color),
+        text: str(req.body?.text),
+      });
+      res.json(link);
+    })
+  );
+
+  router.delete(
+    '/links/:id/highlights/:highlightId',
+    wrap(async (req, res) => {
+      const link = await service.deleteHighlight(req.params.id, req.params.highlightId);
+      res.json(link);
+    })
+  );
+
   // ------------------------------------------------------------ 元数据 / 图标
 
   router.get(

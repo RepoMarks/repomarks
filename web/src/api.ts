@@ -107,6 +107,21 @@ export const api = {
   metadata: (url: string) =>
     request<MetadataPreview>(`/metadata?url=${encodeURIComponent(url)}`),
 
+  addHighlight: (id: string, input: { text: string; note?: string; color?: string }) =>
+    request<LinkRecord>(`/links/${id}/highlights`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateHighlight: (id: string, highlightId: string, patch: { note?: string; color?: string }) =>
+    request<LinkRecord>(`/links/${id}/highlights/${highlightId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteHighlight: (id: string, highlightId: string) =>
+    request<LinkRecord>(`/links/${id}/highlights/${highlightId}`, { method: 'DELETE' }),
+
   listCollections: () => request<Collection[]>('/collections'),
 
   createCollection: (input: { name: string; parentId?: string | null; color?: string }) =>

@@ -8,6 +8,14 @@ import type { LinkRecord } from '../types';
 
 type ViewerFormat = 'html' | 'readable' | 'screenshot' | 'pdf' | 'wayback';
 
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: '#f5d76e',
+  green: '#7bd88f',
+  blue: '#6fb3f2',
+  pink: '#f28fb2',
+  purple: '#b18cf2',
+};
+
 export default function LinkDetailPage() {
   const openMenu = useMenu();
   const { refreshKey, notifyChange } = useApp();
@@ -22,6 +30,9 @@ export default function LinkDetailPage() {
   const [format, setFormat] = useState<ViewerFormat | null>(null);
   const [readable, setReadable] = useState<string | null>(null);
   const [readableLoading, setReadableLoading] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [highlightColor, setHighlightColor] = useState('yellow');
+  const [highlightTarget, setHighlightTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -56,6 +67,27 @@ export default function LinkDetailPage() {
       setBusy(false);
     }
   };
+
+  const createHighlight = () => {
+    if (!link || !selectedText.trim()) return;
+    const text = selectedText.trim();
+    void run(async () => {
+      await api.addHighlight(link.id, { text, color: highlightColor });
+      setSelectedText('');
+      window.getSelection()?.removeAllRanges();
+    });
+  };
+
+  const scrollToQuote = (quote: string) => {
+    setHighlightTarget(quote);
+    setFormat('readable');
+  };
+
+  useEffect(() => {
+    if (!highlightTarget || !readable) return;
+    const element = document.getElementById('reader-highlight-target');
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightTarget, readable]);
 
   if (error) {
     return (
@@ -94,6 +126,12 @@ export default function LinkDetailPage() {
     format && availableFormats.some((item) => item.key === format)
       ? format
       : (availableFormats[0]?.key ?? null);
+  const readerLines = readable ? readable.split('\n') : [];
+  const targetIndex = highlightTarget
+    ? readerLines.findIndex((line) => line.includes(highlightTarget.slice(0, 80)))
+    : -1;
+  const lineHasHighlight = (line: string): boolean =>
+    (link.highlights ?? []).some((item) => line.includes(item.text.slice(0, 30)));
 
   useEffect(() => {
     if (activeFormat !== 'readable' || !link?.readablePath) return;
@@ -236,13 +274,43 @@ export default function LinkDetailPage() {
                   />
                 )}
                 {activeFormat === 'readable' && (
-                  <div className="panel reader">
+                  <div
+                    className="panel reader"
+                    onMouseUp={() =>
+                      setSelectedText(window.getSelection()?.toString().trim() ?? '')
+                    }
+                  >
+                    <div className="reader-toolbar">
+                      <div className="color-swatches">
+                        {Object.entries(HIGHLIGHT_COLORS).map(([name, color]) => (
+                          <button
+                            key={name}
+                            className={`color-swatch ${highlightColor === name ? 'active' : ''}`}
+                            style={{ background: color }}
+                            title={name}
+                            onClick={() => setHighlightColor(name)}
+                          />
+                        ))}
+                      </div>
+                      <button className="btn small" disabled={!selectedText || busy} onClick={createHighlight}>
+                        高亮选中文字
+                      </button>
+                      {selectedText && <span className="field-hint">已选 {selectedText.length} 字</span>}
+                    </div>
                     {readableLoading && <div className="field-hint">加载中…</div>}
-                    {readable
-                      ?.split('\n')
-                      .map((line, index) =>
-                        line ? <p key={`${index}-${line.slice(0, 12)}`}>{line}</p> : null
-                      )}
+                    {readerLines.map((line, index) =>
+                      line ? (
+                        <p
+                          key={`${index}-${line.slice(0, 12)}`}
+                          id={index === targetIndex ? 'reader-highlight-target' : undefined}
+                          className={`${index === targetIndex ? 'reader-target' : ''} ${
+                            lineHasHighlight(line) ? 'has-highlight' : ''
+                          }`}
+                        >
+                          {line}
+                        </p>
+                      ) : null
+                    )}
                   </div>
                 )}
                 {activeFormat === 'wayback' && link.waybackUrl && (
@@ -268,6 +336,54 @@ export default function LinkDetailPage() {
               {Object.entries(link.formatErrors)
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('；')}
+            </div>
+          )}
+
+          {(link.highlights ?? []).length > 0 && (
+            <div className="panel">
+              <h3>高亮与批注（{link.highlights?.length}）</h3>
+              <div className="highlights">
+                {(link.highlights ?? []).map((item) => (
+                  <div className="highlight-item" key={item.id}>
+                    <div className="highlight-head">
+                      <span
+                        className="highlight-dot"
+                        style={{
+                          background:
+                            HIGHLIGHT_COLORS[item.color ?? 'yellow'] ?? HIGHLIGHT_COLORS.yellow,
+                        }}
+                      />
+                      <button
+                        className="highlight-quote"
+                        title="在阅读版中定位"
+                        onClick={() => scrollToQuote(item.text)}
+                      >
+                        {item.text.length > 120 ? `${item.text.slice(0, 120)}…` : item.text}
+                      </button>
+                      <span className="spacer" />
+                      <button
+                        className="icon-btn danger"
+                        disabled={busy}
+                        onClick={() => void run(() => api.deleteHighlight(link.id, item.id))}
+                      >
+                        删除
+                      </button>
+                    </div>
+                    <textarea
+                      className="highlight-note"
+                      defaultValue={item.note ?? ''}
+                      placeholder="添加批注…"
+                      onBlur={(event) => {
+                        if (event.target.value !== (item.note ?? '')) {
+                          void run(() =>
+                            api.updateHighlight(link.id, item.id, { note: event.target.value })
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

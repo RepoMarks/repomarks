@@ -152,6 +152,26 @@ try {
   if (readableText.length < 20) fail('readable archive empty');
   console.log('9. archive served ok (html + readable)');
 
+  const highlight = await req(`/api/links/${link.id}/highlights`, {
+    method: 'POST',
+    body: JSON.stringify({ text: 'Example Domain', color: 'green' }),
+  });
+  if (highlight.res.status !== 201) fail(`add highlight failed: ${highlight.text}`);
+  const highlightId = highlight.data.highlights?.[0]?.id;
+  if (!highlightId) fail('highlight missing in response');
+  const noted = await req(`/api/links/${link.id}/highlights/${highlightId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note: 'smoke note' }),
+  });
+  if (noted.data.highlights?.[0]?.note !== 'smoke note') fail('highlight note update failed');
+  const highlightSearch = await req('/api/links?q=smoke%20note');
+  if (highlightSearch.data.total !== 1) fail('highlight search failed');
+  const removed = await req(`/api/links/${link.id}/highlights/${highlightId}`, {
+    method: 'DELETE',
+  });
+  if ((removed.data.highlights ?? []).length !== 0) fail('highlight delete failed');
+  console.log('9b. highlights CRUD + search ok');
+
   const imported = await req('/api/import', {
     method: 'POST',
     body: JSON.stringify({

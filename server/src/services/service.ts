@@ -5,6 +5,7 @@ import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
 import { LinkStore, normalizeTags } from '../store/store.js';
 import type {
   Collection,
+  Highlight,
   ImportSummary,
   LinkInput,
   LinkRecord,
@@ -306,6 +307,85 @@ export class DataService {
       };
       const changed = await this.store.putLink(updated);
       await this.repo.commit(changed, `link: refetch ${shorten(updated.title)}`);
+      this.schedulePush();
+      return updated;
+    });
+  }
+
+  // ---------------------------------------------------------------- 高亮与批注
+
+  async addHighlight(
+    id: string,
+    input: { text: string; note?: string; color?: string }
+  ): Promise<LinkRecord> {
+    const text = input.text?.trim().slice(0, 5000);
+    if (!text) throw new HttpError(400, '高亮内容不能为空');
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const highlight: Highlight = {
+        id: ulid(),
+        text,
+        note: input.note?.slice(0, 5000) ?? '',
+        color: input.color?.slice(0, 20) || 'yellow',
+        createdAt: new Date().toISOString(),
+      };
+      const updated: LinkRecord = {
+        ...current,
+        highlights: [...(current.highlights ?? []), highlight],
+        updatedAt: new Date().toISOString(),
+      };
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit(changed, `highlight: add ${shorten(current.title)}`);
+      this.schedulePush();
+      return updated;
+    });
+  }
+
+  async updateHighlight(
+    id: string,
+    highlightId: string,
+    patch: { note?: string; color?: string; text?: string }
+  ): Promise<LinkRecord> {
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const highlights = current.highlights ?? [];
+      if (!highlights.some((item) => item.id === highlightId)) {
+        throw new HttpError(404, '高亮不存在');
+      }
+      const updated: LinkRecord = {
+        ...current,
+        highlights: highlights.map((item) =>
+          item.id === highlightId
+            ? {
+                ...item,
+                note: patch.note !== undefined ? patch.note.slice(0, 5000) : item.note,
+                color: patch.color !== undefined ? patch.color.slice(0, 20) : item.color,
+                text: patch.text !== undefined ? patch.text.trim().slice(0, 5000) : item.text,
+              }
+            : item
+        ),
+        updatedAt: new Date().toISOString(),
+      };
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit(changed, `highlight: update ${shorten(current.title)}`);
+      this.schedulePush();
+      return updated;
+    });
+  }
+
+  async deleteHighlight(id: string, highlightId: string): Promise<LinkRecord> {
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const updated: LinkRecord = {
+        ...current,
+        highlights: (current.highlights ?? []).filter((item) => item.id !== highlightId),
+        updatedAt: new Date().toISOString(),
+      };
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit(changed, `highlight: delete ${shorten(current.title)}`);
       this.schedulePush();
       return updated;
     });
