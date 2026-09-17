@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, faviconSrc, formatBytes, hostnameOf } from '../api';
+import { api, faviconSrc, fileUrl, formatBytes, hostnameOf } from '../api';
 import type { Collection, LinkRecord } from '../types';
 
 interface LinkCardProps {
@@ -115,7 +115,7 @@ export default function LinkCard({
             )}
             <span className="site-name">
               {collection ? `${collection.name} · ` : ''}
-              {hostnameOf(link.url)}
+              {link.kind === 'file' ? '本地文件' : hostnameOf(link.url)}
             </span>
             {link.pinned && (
               <span className="pin-mark" title="已置顶">
@@ -139,7 +139,12 @@ export default function LinkCard({
       <div className="card-actions">
         <ArchiveBadge link={link} />
         <span className="spacer" />
-        <a className="icon-btn" href={link.url} target="_blank" rel="noreferrer noopener">
+        <a
+          className="icon-btn"
+          href={link.kind === 'file' ? fileUrl(link.id) : link.url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
           打开
         </a>
         <Link className="icon-btn" to={`/links/${link.id}`}>

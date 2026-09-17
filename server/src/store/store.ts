@@ -307,7 +307,7 @@ export class LinkStore {
 
   async deleteArchiveFile(archivePath: string): Promise<string[]> {
     const normalized = archivePath.replace(/\\/g, '/');
-    if (!normalized.startsWith(`${ARCHIVES_DIR}/`)) return [];
+    if (!normalized.startsWith(`${ARCHIVES_DIR}/`) && !normalized.startsWith('files/')) return [];
     await fsp.rm(this.abs(normalized), { force: true });
     return [normalized];
   }

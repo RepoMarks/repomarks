@@ -21,6 +21,7 @@
 - **公开分享**：收藏夹一键公开，生成只读分享页和 RSS 订阅源（可随时关闭）
 - **API 密钥**：为浏览器扩展（仓库内 `extension/`）和脚本等第三方客户端提供访问令牌
 - **可选 AI**：对接任意 OpenAI 兼容接口（本地 Ollama 或云端），一键生成标签与摘要
+- **文件上传**：把图片 / PDF / HTML 作为书签保存；也可以给已有链接上传自己的 SingleFile / PDF / 截图存档
 - 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
 - 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`
 - 单用户密码登录（`AUTH_PASSWORD`）；深色 / 浅色 / 跟随系统主题，支持 PWA 安装，链接和收藏夹可自定义图标

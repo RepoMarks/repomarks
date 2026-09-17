@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, archiveFormatUrl, faviconSrc, formatBytes, formatDate, hostnameOf } from '../api';
+import {
+  api,
+  archiveFormatUrl,
+  faviconSrc,
+  fileUrl,
+  formatBytes,
+  formatDate,
+  hostnameOf,
+} from '../api';
 import { useApp, useMenu } from '../App';
 import { useCollections, useTags } from '../hooks';
 import LinkFormDialog from '../components/LinkFormDialog';
@@ -36,6 +44,7 @@ export default function LinkDetailPage() {
   const [aiResult, setAiResult] = useState<{ tags: string[]; summary: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const archiveInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     api
@@ -68,6 +77,27 @@ export default function LinkDetailPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const uploadArchiveFile = async (file: File) => {
+    if (!link) return;
+    if (file.size > 50 * 1024 * 1024) {
+      window.alert('文件不能超过 50MB');
+      return;
+    }
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const format = ext === 'pdf' ? 'pdf' : ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? 'screenshot' : 'html';
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.readAsDataURL(file);
+    }).catch((err) => {
+      window.alert((err as Error).message);
+      return '';
+    });
+    if (!dataUrl) return;
+    await run(() => api.uploadArchive(link.id, format, dataUrl.slice(dataUrl.indexOf(',') + 1)));
   };
 
   const runAi = async () => {
@@ -226,14 +256,29 @@ export default function LinkDetailPage() {
                 {link.pinned && <span className="pin-mark">★ </span>}
                 {link.title}
               </h1>
-              <div className="detail-url">{link.url}</div>
+              <div className="detail-url">
+                {link.kind === 'file'
+                  ? `${link.fileName ?? '本地文件'}${link.fileType ? `（${link.fileType}）` : ''}`
+                  : link.url}
+              </div>
             </div>
           </div>
 
           <div className="detail-actions">
-            <a className="btn primary" href={link.url} target="_blank" rel="noreferrer noopener">
-              打开原链接
-            </a>
+            {link.kind === 'file' ? (
+              <a
+                className="btn primary"
+                href={fileUrl(link.id)}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                打开文件
+              </a>
+            ) : (
+              <a className="btn primary" href={link.url} target="_blank" rel="noreferrer noopener">
+                打开原链接
+              </a>
+            )}
             <button
               className="btn"
               disabled={busy || link.archiveStatus === 'pending'}
@@ -245,9 +290,29 @@ export default function LinkDetailPage() {
                   ? '重新存档'
                   : '抓取网页存档'}
             </button>
-            <button className="btn" disabled={busy} onClick={() => void run(() => api.refetchLink(link.id))}>
-              重新抓取元数据
+            {link.kind !== 'file' && (
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => void run(() => api.refetchLink(link.id))}
+              >
+                重新抓取元数据
+              </button>
+            )}
+            <button className="btn" onClick={() => archiveInput.current?.click()}>
+              上传存档
             </button>
+            <input
+              ref={archiveInput}
+              type="file"
+              hidden
+              accept=".html,.htm,.pdf,.png,.jpg,.jpeg,.webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadArchiveFile(file);
+                event.target.value = '';
+              }}
+            />
             <button className="btn" disabled={aiBusy} onClick={() => void runAi()}>
               {aiBusy ? 'AI 生成中…' : 'AI 标签与摘要'}
             </button>
@@ -275,6 +340,24 @@ export default function LinkDetailPage() {
               删除
             </button>
           </div>
+
+          {link.kind === 'file' && (
+            <div className="panel" style={{ padding: 10 }}>
+              {(link.fileType ?? '').startsWith('image/') ? (
+                <img
+                  className="archive-image"
+                  src={fileUrl(link.id)}
+                  alt={link.fileName ?? '文件'}
+                />
+              ) : (
+                <iframe
+                  className="archive-frame"
+                  src={fileUrl(link.id)}
+                  title={link.fileName ?? '文件'}
+                />
+              )}
+            </div>
+          )}
 
           {availableFormats.length > 0 && (
             <>

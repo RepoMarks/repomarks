@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Config } from '../config.js';
 import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
@@ -302,8 +303,15 @@ export class DataService {
       const link = this.store.findById(id);
       if (!link) throw new HttpError(404, '链接不存在');
       const changed = await this.store.deleteLink(id);
-      if (link.archivePath) {
-        changed.push(...(await this.store.deleteArchiveFile(link.archivePath)));
+      for (const filePath of [
+        link.archivePath,
+        link.readablePath,
+        link.screenshotPath,
+        link.pdfPath,
+        link.filePath,
+      ]) {
+        if (!filePath) continue;
+        changed.push(...(await this.store.deleteArchiveFile(filePath)));
       }
       await this.repo.commit(changed, `link: delete ${shorten(link.title)}`);
       this.schedulePush();
@@ -331,6 +339,126 @@ export class DataService {
       this.schedulePush();
       return updated;
     });
+  }
+
+  // ---------------------------------------------------------------- 上传
+
+  async addFileLink(input: {
+    filename: string;
+    mime: string;
+    dataBase64: string;
+    title?: string;
+    tags?: string[];
+    collectionId?: string | null;
+    notes?: string;
+  }): Promise<LinkRecord> {
+    const mime = (input.mime || '').toLowerCase();
+    const allowed =
+      mime.startsWith('image/') || mime === 'application/pdf' || mime === 'text/html';
+    if (!allowed) throw new HttpError(400, '仅支持图片、PDF 或 HTML 文件');
+    const buffer = Buffer.from(input.dataBase64, 'base64');
+    if (buffer.length === 0) throw new HttpError(400, '文件内容为空');
+    if (buffer.length > 25 * 1024 * 1024) throw new HttpError(400, '文件不能超过 25MB');
+    this.requireCollection(input.collectionId);
+
+    const fallbackExt =
+      mime === 'application/pdf' ? '.pdf' : mime === 'text/html' ? '.html' : '.png';
+    const ext = (path.extname(input.filename) || fallbackExt).slice(0, 12);
+
+    return this.mutex.run(async () => {
+      const id = ulid();
+      const relPath = `files/${id}${ext}`;
+      await fsp.mkdir(path.dirname(this.store.abs(relPath)), { recursive: true });
+      await fsp.writeFile(this.store.abs(relPath), buffer);
+      const now = new Date().toISOString();
+      const record: LinkRecord = {
+        id,
+        kind: 'file',
+        url: `local:${input.filename}`,
+        title: (input.title?.trim() || input.filename || '本地文件').slice(0, 500),
+        description: '',
+        tags: normalizeTags(input.tags),
+        collectionId: input.collectionId ?? null,
+        createdAt: now,
+        updatedAt: now,
+        siteName: '本地文件',
+        notes: input.notes ?? '',
+        filePath: relPath,
+        fileName: input.filename,
+        fileType: mime,
+        archivedAt: null,
+        archivePath: null,
+        archiveStatus: 'none',
+      };
+      const changed = await this.store.addLink(record);
+      await this.repo.commit([...changed, relPath], `file: upload ${shorten(record.title)}`);
+      this.schedulePush();
+      return record;
+    });
+  }
+
+  async uploadArchive(
+    id: string,
+    format: 'html' | 'pdf' | 'screenshot',
+    dataBase64: string
+  ): Promise<LinkRecord> {
+    const buffer = Buffer.from(dataBase64, 'base64');
+    if (buffer.length === 0) throw new HttpError(400, '文件内容为空');
+    if (buffer.length > 50 * 1024 * 1024) throw new HttpError(400, '文件不能超过 50MB');
+
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const now = new Date().toISOString();
+      const updated: LinkRecord = {
+        ...current,
+        archiveStatus: 'ok',
+        archiveError: null,
+        formatErrors: null,
+        archivedAt: now,
+        updatedAt: now,
+      };
+      const paths: string[] = [];
+      if (format === 'html') {
+        const gzipped = await gzipHtml(buffer.toString('utf8'));
+        const relPath = `archives/${id}.html.gz`;
+        await fsp.writeFile(this.store.abs(relPath), gzipped);
+        updated.archivePath = relPath;
+        updated.archiveSize = gzipped.length;
+        updated.archiveEngine = 'singlefile';
+        paths.push(relPath);
+      } else if (format === 'pdf') {
+        const relPath = `archives/${id}.pdf`;
+        await fsp.writeFile(this.store.abs(relPath), buffer);
+        updated.pdfPath = relPath;
+        updated.pdfSize = buffer.length;
+        paths.push(relPath);
+      } else {
+        const relPath = `archives/${id}.png`;
+        await fsp.writeFile(this.store.abs(relPath), buffer);
+        updated.screenshotPath = relPath;
+        updated.screenshotSize = buffer.length;
+        paths.push(relPath);
+      }
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit(
+        [...changed, ...paths],
+        `archive: upload ${shorten(current.title)}`
+      );
+      this.schedulePush();
+      return updated;
+    });
+  }
+
+  async readFile(id: string): Promise<{ data: Buffer; contentType: string; fileName: string }> {
+    const link = this.requireLink(id);
+    if (!link.filePath) throw new HttpError(404, '该链接不是本地文件');
+    const data = await fsp.readFile(this.store.abs(link.filePath));
+    return {
+      data,
+      contentType: link.fileType || 'application/octet-stream',
+      fileName: link.fileName || 'file',
+    };
   }
 
   // ---------------------------------------------------------------- AI 标签
@@ -468,6 +596,7 @@ export class DataService {
             link.readablePath,
             link.screenshotPath,
             link.pdfPath,
+            link.filePath,
           ]) {
             if (!archivePath) continue;
             for (const path of await this.store.deleteArchiveFile(archivePath)) paths.add(path);

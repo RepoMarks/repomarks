@@ -30,6 +30,10 @@ export interface LinkRecord {
   formatErrors?: Record<string, string> | null;
   notes?: string;
   highlights?: Highlight[];
+  kind?: 'link' | 'file';
+  filePath?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
 }
 
 export interface Highlight {

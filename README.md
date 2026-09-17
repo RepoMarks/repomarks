@@ -16,6 +16,7 @@ The service clones your data repository locally, reads and writes plain files, a
   - `screenshot` — full-page PNG (requires Chrome/Chromium)
   - `pdf` — print-to-PDF (requires Chrome/Chromium)
   - `wayback` — submit the page to the Wayback Machine and store the snapshot URL (opt-in)
+- Upload images / PDFs / HTML files as bookmarks, and attach your own SingleFile / PDF / screenshot files to existing links
 - Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports (including Linkwarden); folders become collections and duplicate URLs are skipped
 - Export everything as JSON; all data files are human-readable and can be edited by hand before `git push`
 - Optional AI tagging: suggest tags and a one-sentence summary through any OpenAI-compatible API (local Ollama or a hosted provider), then apply with one click

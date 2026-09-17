@@ -212,6 +212,35 @@ try {
   if ((removed.data.highlights ?? []).length !== 0) fail('highlight delete failed');
   console.log('9b. highlights CRUD + search ok');
 
+  const pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const uploaded = await req('/api/links/upload', {
+    method: 'POST',
+    body: JSON.stringify({ filename: 'pixel.png', mime: 'image/png', dataBase64: pngBase64 }),
+  });
+  if (uploaded.res.status !== 201) fail(`upload file failed: ${uploaded.text}`);
+  const fileRes = await fetch(`${baseUrl}/api/links/${uploaded.data.id}/file`, {
+    headers: { cookie },
+  });
+  if (fileRes.status !== 200) fail(`served uploaded file failed: ${fileRes.status}`);
+  if (!(fileRes.headers.get('content-type') ?? '').includes('image/png')) {
+    fail('uploaded file mime mismatch');
+  }
+  const attach = await req(`/api/links/${link.id}/archive/upload`, {
+    method: 'POST',
+    body: JSON.stringify({
+      format: 'html',
+      dataBase64: Buffer.from('<html><body>uploaded-archive</body></html>').toString('base64'),
+    }),
+  });
+  if (attach.res.status !== 200) fail(`archive upload failed: ${attach.text}`);
+  const uploadedArchive = await fetch(`${baseUrl}/api/links/${link.id}/archive`, {
+    headers: { cookie },
+  });
+  const uploadedHtml = await uploadedArchive.text();
+  if (!uploadedHtml.includes('uploaded-archive')) fail('uploaded archive not served');
+  console.log('9c. file upload + archive upload ok');
+
   const imported = await req('/api/import', {
     method: 'POST',
     body: JSON.stringify({
@@ -228,7 +257,7 @@ try {
   console.log('11. search + filter ok');
 
   const status = await req('/api/status');
-  if (status.data.stats.links !== 2) fail(`expected 2 links, got ${status.data.stats.links}`);
+  if (status.data.stats.links !== 3) fail(`expected 3 links, got ${status.data.stats.links}`);
   console.log(
     `12. status ok (links=${status.data.stats.links}, archived=${status.data.stats.archived}, engine=${status.data.archive.engine})`
   );
@@ -251,7 +280,7 @@ try {
   console.log('14. frontend + SPA fallback ok');
 
   const exported = await req('/api/export');
-  if (exported.data.links.length !== 2) fail('export failed');
+  if (exported.data.links.length !== 3) fail('export failed');
   console.log('15. export ok');
 
   const badUrl = await req('/api/links', {

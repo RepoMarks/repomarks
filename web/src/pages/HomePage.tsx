@@ -45,6 +45,34 @@ export default function HomePage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const requestId = useRef(0);
+  const uploadInput = useRef<HTMLInputElement>(null);
+
+  const readAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.readAsDataURL(file);
+    });
+
+  const uploadFile = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      window.alert('文件不能超过 25MB');
+      return;
+    }
+    try {
+      const dataUrl = await readAsDataUrl(file);
+      await api.addFileLink({
+        filename: file.name,
+        mime: file.type || 'application/octet-stream',
+        dataBase64: dataUrl.slice(dataUrl.indexOf(',') + 1),
+      });
+      notifyChange();
+      load();
+    } catch (err) {
+      window.alert((err as Error).message);
+    }
+  };
 
   const load = useCallback(() => {
     const id = ++requestId.current;
@@ -198,6 +226,24 @@ export default function HomePage() {
         >
           {selectMode ? '退出选择' : '选择'}
         </button>
+        <button
+          className="btn ghost"
+          title="上传图片 / PDF / HTML"
+          onClick={() => uploadInput.current?.click()}
+        >
+          上传文件
+        </button>
+        <input
+          ref={uploadInput}
+          type="file"
+          hidden
+          accept="image/*,application/pdf,text/html,.html"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void uploadFile(file);
+            event.target.value = '';
+          }}
+        />
         <button className="btn primary" onClick={() => setShowAdd(true)}>
           添加链接
         </button>

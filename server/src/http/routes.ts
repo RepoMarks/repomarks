@@ -175,6 +175,55 @@ export function createRouter(service: DataService, auth: Auth): Router {
   );
 
   router.post(
+    '/links/upload',
+    wrap(async (req, res) => {
+      const record = await service.addFileLink({
+        filename: requireString(req.body?.filename, 'filename'),
+        mime: str(req.body?.mime) ?? 'application/octet-stream',
+        dataBase64: requireString(req.body?.dataBase64, 'dataBase64'),
+        title: str(req.body?.title),
+        tags: Array.isArray(req.body?.tags) ? req.body.tags.map(String) : undefined,
+        collectionId: req.body?.collectionId ?? null,
+        notes: str(req.body?.notes),
+      });
+      res.status(201).json(record);
+    })
+  );
+
+  router.post(
+    '/links/:id/archive/upload',
+    wrap(async (req, res) => {
+      const format = requireString(req.body?.format, 'format');
+      if (!['html', 'pdf', 'screenshot'].includes(format)) {
+        throw new HttpError(400, '不支持的格式（html / pdf / screenshot）');
+      }
+      const record = await service.uploadArchive(
+        req.params.id,
+        format as 'html' | 'pdf' | 'screenshot',
+        requireString(req.body?.dataBase64, 'dataBase64')
+      );
+      res.json(record);
+    })
+  );
+
+  router.get(
+    '/links/:id/file',
+    wrap(async (req, res) => {
+      const { data, contentType, fileName } = await service.readFile(req.params.id);
+      if (contentType.includes('html')) {
+        res.setHeader('content-security-policy', 'sandbox');
+      }
+      res.setHeader('content-type', contentType);
+      res.setHeader(
+        'content-disposition',
+        `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`
+      );
+      res.setHeader('x-content-type-options', 'nosniff');
+      res.send(data);
+    })
+  );
+
+  router.post(
     '/links/:id/ai',
     wrap(async (req, res) => {
       res.json(await service.aiSuggest(req.params.id, req.body?.apply === true));

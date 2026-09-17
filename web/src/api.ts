@@ -114,6 +114,22 @@ export const api = {
 
   archiveLink: (id: string) => request<LinkRecord>(`/links/${id}/archive`, { method: 'POST' }),
 
+  addFileLink: (input: {
+    filename: string;
+    mime: string;
+    dataBase64: string;
+    title?: string;
+    tags?: string[];
+    collectionId?: string | null;
+    notes?: string;
+  }) => request<LinkRecord>('/links/upload', { method: 'POST', body: JSON.stringify(input) }),
+
+  uploadArchive: (id: string, format: 'html' | 'pdf' | 'screenshot', dataBase64: string) =>
+    request<LinkRecord>(`/links/${id}/archive/upload`, {
+      method: 'POST',
+      body: JSON.stringify({ format, dataBase64 }),
+    }),
+
   suggestAi: (id: string, apply = false) =>
     request<{ tags: string[]; summary: string; applied: boolean }>(`/links/${id}/ai`, {
       method: 'POST',
@@ -183,6 +199,10 @@ export const api = {
     request<ImportSummary>('/import', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
+export function fileUrl(id: string): string {
+  return `/api/links/${id}/file`;
+}
+
 export function archiveFormatUrl(
   id: string,
   format: 'html' | 'readable' | 'screenshot' | 'pdf'
@@ -191,6 +211,7 @@ export function archiveFormatUrl(
 }
 
 export function faviconSrc(link: LinkRecord): string | null {
+  if (link.kind === 'file') return null;
   if (link.icon) return `/api/favicon?url=${encodeURIComponent(link.icon)}`;
   if (link.favicon) return `/api/favicon?url=${encodeURIComponent(link.favicon)}`;
   try {
