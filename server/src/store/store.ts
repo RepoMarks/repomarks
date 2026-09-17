@@ -138,10 +138,14 @@ export class LinkStore {
   private normalizeCollection(record: Collection): Collection {
     const now = new Date().toISOString();
     return {
+      ...record,
       id: record.id,
       name: record.name || '未命名',
       color: record.color ?? '',
       parentId: record.parentId ?? null,
+      isPublic: record.isPublic ?? false,
+      slug: record.slug ?? '',
+      description: record.description ?? '',
       createdAt: record.createdAt || now,
       updatedAt: record.updatedAt || record.createdAt || now,
     };

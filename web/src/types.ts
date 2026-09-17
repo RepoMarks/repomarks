@@ -44,6 +44,9 @@ export interface Collection {
   name: string;
   color?: string;
   parentId?: string | null;
+  isPublic?: boolean;
+  slug?: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
   linkCount?: number;

@@ -137,7 +137,16 @@ export const api = {
   createCollection: (input: { name: string; parentId?: string | null; color?: string }) =>
     request<Collection>('/collections', { method: 'POST', body: JSON.stringify(input) }),
 
-  updateCollection: (id: string, patch: { name?: string; parentId?: string | null; color?: string }) =>
+  updateCollection: (
+    id: string,
+    patch: {
+      name?: string;
+      parentId?: string | null;
+      color?: string;
+      isPublic?: boolean;
+      description?: string;
+    }
+  ) =>
     request<Collection>(`/collections/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),

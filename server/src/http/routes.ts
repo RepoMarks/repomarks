@@ -312,6 +312,8 @@ export function createRouter(service: DataService, auth: Auth): Router {
         name: str(req.body?.name),
         color: str(req.body?.color),
         parentId: req.body?.parentId === undefined ? undefined : req.body.parentId,
+        isPublic: typeof req.body?.isPublic === 'boolean' ? req.body.isPublic : undefined,
+        description: str(req.body?.description),
       });
       res.json(collection);
     })

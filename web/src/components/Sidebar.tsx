@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useCollections, useStatus, useTags } from '../hooks';
+import CollectionDialog from './CollectionDialog';
 import type { Collection } from '../types';
 
 function CollectionTree({
@@ -11,12 +12,14 @@ function CollectionTree({
   depth,
   activeId,
   onSelect,
+  onEdit,
 }: {
   collections: Collection[];
   parentId: string | null;
   depth: number;
   activeId: string;
   onSelect: (id: string) => void;
+  onEdit: (collection: Collection) => void;
 }) {
   return (
     <>
@@ -25,24 +28,37 @@ function CollectionTree({
         .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
         .map((collection) => (
           <div key={collection.id}>
-            <button
-              className={`nav-item ${activeId === collection.id ? 'active' : ''}`}
-              style={{ paddingLeft: 9 + depth * 14 }}
-              onClick={() => onSelect(collection.id)}
-              title={collection.name}
-            >
-              <span className="nav-dot" style={{ background: collection.color || '#5b8def' }} />
-              <span className="site-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {collection.name}
-              </span>
-              <span className="count">{collection.linkCount ?? 0}</span>
-            </button>
+            <div className="collection-row">
+              <button
+                className={`nav-item ${activeId === collection.id ? 'active' : ''}`}
+                style={{ paddingLeft: 9 + depth * 14 }}
+                onClick={() => onSelect(collection.id)}
+                title={collection.name}
+              >
+                <span className="nav-dot" style={{ background: collection.color || '#5b8def' }} />
+                <span className="site-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {collection.name}
+                </span>
+                <span className="count">
+                  {collection.isPublic ? '· ' : ''}
+                  {collection.linkCount ?? 0}
+                </span>
+              </button>
+              <button
+                className="icon-btn collection-edit"
+                title="收藏夹设置"
+                onClick={() => onEdit(collection)}
+              >
+                ✎
+              </button>
+            </div>
             <CollectionTree
               collections={collections}
               parentId={collection.id}
               depth={depth + 1}
               activeId={activeId}
               onSelect={onSelect}
+              onEdit={onEdit}
             />
           </div>
         ))}
@@ -60,6 +76,7 @@ export default function Sidebar({ open }: { open: boolean }) {
   const status = useStatus(refreshKey, 15000);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Collection | null>(null);
 
   const collectionId = params.get('collection') ?? '';
   const tag = params.get('tag') ?? '';
@@ -194,6 +211,7 @@ export default function Sidebar({ open }: { open: boolean }) {
             depth={0}
             activeId={isHome ? collectionId : ''}
             onSelect={(id) => apply({ collection: id })}
+            onEdit={setEditing}
           />
           {collections.length === 0 && !creating && (
             <div className="field-hint" style={{ padding: '2px 10px' }}>
@@ -257,6 +275,15 @@ export default function Sidebar({ open }: { open: boolean }) {
           退出登录
         </button>
       </div>
+
+      {editing && (
+        <CollectionDialog
+          collection={editing}
+          collections={collections}
+          onClose={() => setEditing(null)}
+          onChanged={notifyChange}
+        />
+      )}
     </aside>
   );
 }

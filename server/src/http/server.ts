@@ -6,6 +6,7 @@ import type { Config } from '../config.js';
 import type { Auth } from '../auth.js';
 import type { DataService } from '../services/service.js';
 import { createRouter } from './routes.js';
+import { createPublicRouter } from './public.js';
 import { HttpError } from '../util/misc.js';
 import { logger } from '../logger.js';
 
@@ -25,6 +26,7 @@ export function createApp(config: Config, service: DataService, auth: Auth): Exp
   });
   app.use(auth.middleware);
   app.use('/api', createRouter(service, auth));
+  app.use(createPublicRouter(service));
 
   if (fs.existsSync(webDist)) {
     app.use(

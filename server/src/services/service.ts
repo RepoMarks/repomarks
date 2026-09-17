@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import type { Config } from '../config.js';
 import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
 import { LinkStore, normalizeTags } from '../store/store.js';
@@ -62,6 +63,15 @@ function pickColor(name: string): string {
   let hash = 0;
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return PALETTE[hash % PALETTE.length];
+}
+
+const SLUG_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+
+function randomSlug(length = 12): string {
+  const bytes = randomBytes(length);
+  let out = '';
+  for (const byte of bytes) out += SLUG_ALPHABET[byte % SLUG_ALPHABET.length];
+  return out;
 }
 
 export class DataService {
@@ -714,6 +724,9 @@ export class DataService {
         name: name.slice(0, 200),
         color: input.color?.trim() || pickColor(name),
         parentId: input.parentId ?? null,
+        isPublic: false,
+        slug: '',
+        description: '',
         createdAt: now,
         updatedAt: now,
       };
@@ -727,7 +740,13 @@ export class DataService {
 
   async updateCollection(
     id: string,
-    patch: { name?: string; color?: string; parentId?: string | null }
+    patch: {
+      name?: string;
+      color?: string;
+      parentId?: string | null;
+      isPublic?: boolean;
+      description?: string;
+    }
   ): Promise<Collection> {
     return this.mutex.run(async () => {
       const current = this.store.collections.get(id);
@@ -750,6 +769,13 @@ export class DataService {
           cursor = parent.parentId;
         }
         updated.parentId = patch.parentId ?? null;
+      }
+      if (patch.isPublic !== undefined) {
+        updated.isPublic = patch.isPublic;
+        if (patch.isPublic && !updated.slug) updated.slug = randomSlug();
+      }
+      if (patch.description !== undefined) {
+        updated.description = patch.description.slice(0, 1000);
       }
       this.store.collections.set(id, updated);
       const changed = await this.store.saveCollections();
@@ -783,6 +809,33 @@ export class DataService {
       await this.repo.commit([...paths], `collection: delete ${shorten(collection.name)}`);
       this.schedulePush();
     });
+  }
+
+  // ---------------------------------------------------------------- 公开分享
+
+  /** 按 slug 查找已公开的收藏夹（包含子收藏夹里的链接） */
+  findPublicCollection(slug: string): { collection: Collection; links: LinkRecord[] } | null {
+    if (!slug) return null;
+    const collection = [...this.store.collections.values()].find(
+      (item) => item.isPublic && item.slug === slug
+    );
+    if (!collection) return null;
+    const ids = new Set<string>();
+    const collect = (id: string): void => {
+      ids.add(id);
+      for (const child of this.store.collections.values()) {
+        if (child.parentId === id) collect(child.id);
+      }
+    };
+    collect(collection.id);
+    const links = [...this.store.links.values()]
+      .filter((link) => link.collectionId && ids.has(link.collectionId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { collection, links };
+  }
+
+  findPublicLink(slug: string, linkId: string): LinkRecord | null {
+    return this.findPublicCollection(slug)?.links.find((link) => link.id === linkId) ?? null;
   }
 
   // ---------------------------------------------------------------- 导入导出

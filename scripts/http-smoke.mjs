@@ -114,6 +114,23 @@ try {
   if (patched.data.collectionId !== collection.data.id) fail('patch collection failed');
   console.log('6. collection + patch ok');
 
+  const shared = await req(`/api/collections/${collection.data.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isPublic: true, description: 'smoke share' }),
+  });
+  if (!shared.data.isPublic || !shared.data.slug) fail(`enable sharing failed: ${shared.text}`);
+  const sharePage = await fetch(`${baseUrl}/share/${shared.data.slug}`);
+  const shareHtml = await sharePage.text();
+  if (sharePage.status !== 200 || !shareHtml.includes('smoke share')) {
+    fail(`share page failed: ${sharePage.status}`);
+  }
+  const feed = await fetch(`${baseUrl}/share/${shared.data.slug}/feed.xml`);
+  const feedXml = await feed.text();
+  if (feed.status !== 200 || !feedXml.includes('<rss')) fail('rss feed failed');
+  const hiddenShare = await fetch(`${baseUrl}/share/doesnotexist`);
+  if (hiddenShare.status !== 404) fail('unknown share should 404');
+  console.log(`6b. public sharing + RSS ok (slug=${shared.data.slug})`);
+
   const dupe = await req('/api/links', {
     method: 'POST',
     body: JSON.stringify({ url: 'https://example.com', title: '重复', fetchMetadata: false }),
