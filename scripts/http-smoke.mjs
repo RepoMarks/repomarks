@@ -144,7 +144,13 @@ try {
   if (!archiveHtml.includes('repomarks-archive') && archived.archiveEngine !== 'singlefile') {
     fail('archive marker missing');
   }
-  console.log('9. archive served ok');
+  const readablePage = await fetch(`${baseUrl}/api/links/${link.id}/archive?format=readable`, {
+    headers: { cookie },
+  });
+  const readableText = await readablePage.text();
+  if (readablePage.status !== 200) fail(`readable http ${readablePage.status}`);
+  if (readableText.length < 20) fail('readable archive empty');
+  console.log('9. archive served ok (html + readable)');
 
   const imported = await req('/api/import', {
     method: 'POST',

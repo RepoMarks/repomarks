@@ -7,7 +7,10 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { logger } from '../logger.js';
 import { captureBasicArchive } from './basic-archive.js';
-import type { Config } from '../config.js';
+import { USER_AGENT } from './metadata.js';
+import type { ArchiveFormat, Config } from '../config.js';
+
+export type { ArchiveFormat };
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -22,6 +25,8 @@ export interface ArchiveAvailability {
   available: boolean;
   browserPath?: string;
   reason?: string;
+  /** 已启用的存档格式 */
+  formats: ArchiveFormat[];
 }
 
 function findInPath(names: string[]): string | null {
@@ -95,18 +100,24 @@ export function resolveSingleFileBin(): string | null {
 }
 
 export function resolveArchiveAvailability(config: Config): ArchiveAvailability {
+  const formats = config.archiveFormats.filter((format) => format !== 'wayback' || config.archiveWayback);
   if (config.archiveEngine === 'off') {
-    return { engine: 'off', available: false, reason: '已在配置中关闭存档功能' };
+    return { engine: 'off', available: false, reason: '已在配置中关闭存档功能', formats: [] };
   }
   const browserPath = resolveBrowserPath(config.archiveBrowserPath);
   const singleFileBin = resolveSingleFileBin();
   if (config.archiveEngine === 'basic') {
-    return { engine: 'basic', available: true, browserPath: browserPath ?? undefined };
+    return { engine: 'basic', available: true, browserPath: browserPath ?? undefined, formats };
   }
   if (!singleFileBin) {
     return config.archiveEngine === 'singlefile'
-      ? { engine: 'singlefile', available: false, reason: '未安装 single-file-cli' }
-      : { engine: 'basic', available: true, reason: '未安装 single-file-cli，使用轻量存档' };
+      ? { engine: 'singlefile', available: false, reason: '未安装 single-file-cli', formats }
+      : {
+          engine: 'basic',
+          available: true,
+          reason: '未安装 single-file-cli，使用轻量存档',
+          formats,
+        };
   }
   if (!browserPath) {
     return config.archiveEngine === 'singlefile'
@@ -114,10 +125,16 @@ export function resolveArchiveAvailability(config: Config): ArchiveAvailability 
           engine: 'singlefile',
           available: false,
           reason: '未找到 Chrome/Chromium，可设置 ARCHIVE_BROWSER_PATH',
+          formats,
         }
-      : { engine: 'basic', available: true, reason: '未找到 Chrome/Chromium，使用轻量存档' };
+      : {
+          engine: 'basic',
+          available: true,
+          reason: '未找到 Chrome/Chromium，使用轻量存档',
+          formats,
+        };
   }
-  return { engine: 'singlefile', available: true, browserPath };
+  return { engine: 'singlefile', available: true, browserPath, formats };
 }
 
 function captureSingleFile(
@@ -219,6 +236,117 @@ export async function captureArchive(
   }
   const html = await captureBasicArchive(url, config.fetchTimeoutMs);
   return { html, engine: 'basic' };
+}
+
+function runBrowserProcess(
+  browserPath: string,
+  browserArgs: string[],
+  args: string[],
+  timeoutMs: number
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(browserPath, [...browserArgs, ...args], { windowsHide: true });
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      reject(new Error(`浏览器操作超时（${Math.round(timeoutMs / 1000)} 秒）`));
+    }, timeoutMs);
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < MAX_STDERR_BYTES) stderr += chunk.toString();
+    });
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`浏览器退出码 ${code}: ${stderr.trim().split('\n').slice(-2).join(' | ')}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function fileSize(filePath: string): Promise<number> {
+  const stat = await fs.promises.stat(filePath);
+  if (stat.size <= 0) throw new Error('生成的文件为空');
+  return stat.size;
+}
+
+/** 用 Chromium/Chrome 的 headless 模式截取页面截图（PNG） */
+export async function captureScreenshot(
+  url: string,
+  outPath: string,
+  browserPath: string,
+  browserArgs: string[],
+  timeoutMs: number
+): Promise<number> {
+  await fs.promises.rm(outPath, { force: true });
+  await runBrowserProcess(
+    browserPath,
+    browserArgs,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--hide-scrollbars',
+      '--window-size=1280,2200',
+      '--virtual-time-budget=8000',
+      `--screenshot=${outPath}`,
+      url,
+    ],
+    timeoutMs
+  );
+  return fileSize(outPath);
+}
+
+/** 用 Chromium/Chrome 的 headless 模式打印页面为 PDF */
+export async function capturePdf(
+  url: string,
+  outPath: string,
+  browserPath: string,
+  browserArgs: string[],
+  timeoutMs: number
+): Promise<number> {
+  await fs.promises.rm(outPath, { force: true });
+  await runBrowserProcess(
+    browserPath,
+    browserArgs,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-pdf-header-footer',
+      '--virtual-time-budget=8000',
+      `--print-to-pdf=${outPath}`,
+      url,
+    ],
+    timeoutMs
+  );
+  return fileSize(outPath);
+}
+
+/** 把页面提交给 Wayback Machine，返回快照地址（可选功能） */
+export async function sendToWayback(url: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const res = await fetch(`https://web.archive.org/save/${url}`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { 'user-agent': USER_AGENT },
+    });
+    if (!res.ok) return null;
+    return /web\.archive\.org\/web\//.test(res.url) ? res.url : null;
+  } catch (err) {
+    logger.warn(`Wayback Machine 提交失败: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 export async function gzipHtml(html: string): Promise<Buffer> {

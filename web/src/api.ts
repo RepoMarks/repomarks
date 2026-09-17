@@ -127,6 +127,13 @@ export const api = {
     request<ImportSummary>('/import', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
+export function archiveFormatUrl(
+  id: string,
+  format: 'html' | 'readable' | 'screenshot' | 'pdf'
+): string {
+  return `/api/links/${id}/archive?format=${format}`;
+}
+
 export function faviconSrc(link: LinkRecord): string | null {
   if (link.favicon) return `/api/favicon?url=${encodeURIComponent(link.favicon)}`;
   try {

@@ -103,6 +103,8 @@ export default function SettingsPage() {
               </dd>
               <dt>可用性</dt>
               <dd>{archive.available ? '可用' : `不可用${archive.reason ? `：${archive.reason}` : ''}`}</dd>
+              <dt>存档格式</dt>
+              <dd>{(archive.formats ?? []).join('、') || '-'}</dd>
               <dt>浏览器</dt>
               <dd style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{archive.browserPath ?? '-'}</dd>
               <dt>已存档</dt>

@@ -50,6 +50,12 @@ async function main(): Promise<void> {
   if (archived.archiveStatus !== 'ok') throw new Error(`存档失败: ${archived.archiveError}`);
   const html = await a.readArchive(link.id);
   if (!html.includes('<')) throw new Error('存档内容异常');
+  if (!archived.readablePath) throw new Error('缺少阅读版存档');
+  const readable = await a.readArchiveFormat(link.id, 'readable');
+  if (readable.data.length < 20) throw new Error('阅读版内容为空');
+  console.log('archive formats:', Object.keys(archived.formatErrors ?? {}).length > 0
+    ? `ok (errors: ${JSON.stringify(archived.formatErrors)})`
+    : 'all ok');
 
   const search = a.search({ q: '测试' });
   console.log('search hits:', search.total);

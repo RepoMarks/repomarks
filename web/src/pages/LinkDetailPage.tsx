@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, faviconSrc, formatBytes, formatDate, hostnameOf } from '../api';
+import { api, archiveFormatUrl, faviconSrc, formatBytes, formatDate, hostnameOf } from '../api';
 import { useApp, useMenu } from '../App';
 import { useCollections, useTags } from '../hooks';
 import LinkFormDialog from '../components/LinkFormDialog';
 import type { LinkRecord } from '../types';
+
+type ViewerFormat = 'html' | 'readable' | 'screenshot' | 'pdf' | 'wayback';
 
 export default function LinkDetailPage() {
   const openMenu = useMenu();
@@ -17,7 +19,9 @@ export default function LinkDetailPage() {
   const [link, setLink] = useState<LinkRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [showArchive, setShowArchive] = useState(false);
+  const [format, setFormat] = useState<ViewerFormat | null>(null);
+  const [readable, setReadable] = useState<string | null>(null);
+  const [readableLoading, setReadableLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -78,6 +82,43 @@ export default function LinkDetailPage() {
   const collection = collections.find((item) => item.id === link.collectionId);
   const icon = faviconSrc(link);
 
+  const formats: Array<{ key: ViewerFormat; label: string; available: boolean; size?: number | null }> = [
+    { key: 'html', label: '网页存档', available: Boolean(link.archivePath), size: link.archiveSize },
+    { key: 'readable', label: '阅读版', available: Boolean(link.readablePath), size: link.readableSize },
+    { key: 'screenshot', label: '截图', available: Boolean(link.screenshotPath), size: link.screenshotSize },
+    { key: 'pdf', label: 'PDF', available: Boolean(link.pdfPath), size: link.pdfSize },
+    { key: 'wayback', label: 'Wayback', available: Boolean(link.waybackUrl) },
+  ];
+  const availableFormats = formats.filter((item) => item.available);
+  const activeFormat: ViewerFormat | null =
+    format && availableFormats.some((item) => item.key === format)
+      ? format
+      : (availableFormats[0]?.key ?? null);
+
+  useEffect(() => {
+    if (activeFormat !== 'readable' || !link?.readablePath) return;
+    let alive = true;
+    setReadableLoading(true);
+    setReadable(null);
+    fetch(archiveFormatUrl(link.id, 'readable'), { credentials: 'same-origin' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then((text) => {
+        if (alive) setReadable(text);
+      })
+      .catch((err) => {
+        if (alive) setReadable(`加载失败：${(err as Error).message}`);
+      })
+      .finally(() => {
+        if (alive) setReadableLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeFormat, link?.id, link?.readablePath]);
+
   return (
     <>
       <div className="topbar">
@@ -118,28 +159,17 @@ export default function LinkDetailPage() {
             <a className="btn primary" href={link.url} target="_blank" rel="noreferrer noopener">
               打开原链接
             </a>
-            {link.archivedAt ? (
-              <button className="btn" onClick={() => setShowArchive((value) => !value)}>
-                {showArchive ? '收起存档' : '查看网页存档'}
-              </button>
-            ) : (
-              <button
-                className="btn"
-                disabled={busy || link.archiveStatus === 'pending'}
-                onClick={() => void run(() => api.archiveLink(link.id))}
-              >
-                {link.archiveStatus === 'pending' ? '存档中…' : '抓取网页存档'}
-              </button>
-            )}
-            {link.archivedAt && (
-              <button
-                className="btn"
-                disabled={busy || link.archiveStatus === 'pending'}
-                onClick={() => void run(() => api.archiveLink(link.id))}
-              >
-                重新存档
-              </button>
-            )}
+            <button
+              className="btn"
+              disabled={busy || link.archiveStatus === 'pending'}
+              onClick={() => void run(() => api.archiveLink(link.id))}
+            >
+              {link.archiveStatus === 'pending'
+                ? '存档中…'
+                : link.archivedAt
+                  ? '重新存档'
+                  : '抓取网页存档'}
+            </button>
             <button className="btn" disabled={busy} onClick={() => void run(() => api.refetchLink(link.id))}>
               重新抓取元数据
             </button>
@@ -168,14 +198,76 @@ export default function LinkDetailPage() {
             </button>
           </div>
 
-          {showArchive && link.archivedAt && (
-            <div className="panel" style={{ padding: 10 }}>
-              <iframe
-                className="archive-frame"
-                src={`/api/links/${link.id}/archive`}
-                sandbox="allow-same-origin"
-                title="网页存档"
-              />
+          {availableFormats.length > 0 && (
+            <>
+              <div className="format-tabs">
+                {availableFormats.map((item) => (
+                  <button
+                    key={item.key}
+                    className={`format-tab ${activeFormat === item.key ? 'active' : ''}`}
+                    onClick={() => setFormat(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="format-viewer">
+                {activeFormat === 'html' && (
+                  <iframe
+                    className="archive-frame"
+                    src={archiveFormatUrl(link.id, 'html')}
+                    sandbox="allow-same-origin"
+                    title="网页存档"
+                  />
+                )}
+                {activeFormat === 'screenshot' && (
+                  <img
+                    className="archive-image"
+                    src={archiveFormatUrl(link.id, 'screenshot')}
+                    alt="页面截图"
+                  />
+                )}
+                {activeFormat === 'pdf' && (
+                  <iframe
+                    className="archive-frame"
+                    src={archiveFormatUrl(link.id, 'pdf')}
+                    title="PDF 存档"
+                  />
+                )}
+                {activeFormat === 'readable' && (
+                  <div className="panel reader">
+                    {readableLoading && <div className="field-hint">加载中…</div>}
+                    {readable
+                      ?.split('\n')
+                      .map((line, index) =>
+                        line ? <p key={`${index}-${line.slice(0, 12)}`}>{line}</p> : null
+                      )}
+                  </div>
+                )}
+                {activeFormat === 'wayback' && link.waybackUrl && (
+                  <div className="panel">
+                    <h3>Wayback Machine 快照</h3>
+                    <div style={{ wordBreak: 'break-all' }}>
+                      <a href={link.waybackUrl} target="_blank" rel="noreferrer noopener">
+                        {link.waybackUrl}
+                      </a>
+                    </div>
+                    <div className="field-hint" style={{ marginTop: 8 }}>
+                      存档时间：{formatDate(link.waybackAt)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {link.archivedAt && link.formatErrors && Object.keys(link.formatErrors).length > 0 && (
+            <div className="field-hint">
+              部分格式失败：
+              {Object.entries(link.formatErrors)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('；')}
             </div>
           )}
 
@@ -225,8 +317,18 @@ export default function LinkDetailPage() {
                 {link.archiveStatus === 'pending' && '存档中…'}
                 {link.archiveStatus === 'failed' && `失败：${link.archiveError ?? ''}`}
                 {link.archiveStatus !== 'pending' && link.archiveStatus !== 'failed' && link.archivedAt
-                  ? `已存档（${link.archiveEngine ?? '未知引擎'}，${formatBytes(link.archiveSize)}，${formatDate(link.archivedAt)}）`
+                  ? `已存档（${link.archiveEngine ?? '未知引擎'}，${formatDate(link.archivedAt)}）`
                   : !link.archivedAt && '未存档'}
+              </dd>
+              <dt>存档格式</dt>
+              <dd>
+                {availableFormats.length > 0
+                  ? availableFormats
+                      .filter((item) => item.key !== 'wayback')
+                      .map((item) => `${item.label} ${formatBytes(item.size)}`)
+                      .concat(link.waybackUrl ? ['Wayback'] : [])
+                      .join('，')
+                  : '-'}
               </dd>
               <dt>本地 ID</dt>
               <dd style={{ color: 'var(--muted)', fontFamily: 'monospace', fontSize: 12.5 }}>{link.id}</dd>

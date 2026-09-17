@@ -18,7 +18,25 @@ export interface LinkRecord {
   archiveStatus?: 'none' | 'pending' | 'ok' | 'failed';
   archiveError?: string | null;
   archiveSize?: number | null;
+  readablePath?: string | null;
+  readableSize?: number | null;
+  screenshotPath?: string | null;
+  screenshotSize?: number | null;
+  pdfPath?: string | null;
+  pdfSize?: number | null;
+  waybackUrl?: string | null;
+  waybackAt?: string | null;
+  formatErrors?: Record<string, string> | null;
   notes?: string;
+  highlights?: Highlight[];
+}
+
+export interface Highlight {
+  id: string;
+  text: string;
+  note?: string;
+  color?: string;
+  createdAt: string;
 }
 
 export interface Collection {

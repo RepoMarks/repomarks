@@ -8,9 +8,12 @@
 
 - 链接增删改查，自动抓取标题 / 描述 / 站点名 / favicon / OG 封面图
 - 收藏夹（支持多级目录）、标签、置顶、备注、全文搜索（支持 `tag:` 前缀）
-- **网页存档**：把页面保存为单文件 HTML（gzip 压缩）存进仓库，随时回看
-  - 有 Chrome/Chromium 时用 [single-file-cli](https://github.com/gildas-lormeau/single-file-cli) 做完整存档（含图片/样式内联）
-  - 没有浏览器时自动退化为轻量内联存档（样式内联、同源图片转 data URI）
+- **多格式网页存档**（gzip 压缩后存进仓库），详情页用标签页切换查看：
+  - `html`：单文件 HTML 完整存档，有 Chrome/Chromium 时用 [single-file-cli](https://github.com/gildas-lormeau/single-file-cli)（含图片/样式内联），没有浏览器时自动退化为轻量内联存档
+  - `readable`：正文提取（类似 Reader Mode），适合阅读
+  - `screenshot`：全页截图 PNG（需要 Chrome/Chromium）
+  - `pdf`：打印为 PDF（需要 Chrome/Chromium）
+  - `wayback`：提交到 Wayback Machine 并保存快照地址（可选，`ARCHIVE_WAYBACK=true`）
 - 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
 - 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`
 - 单用户密码登录（`AUTH_PASSWORD`）
@@ -175,6 +178,8 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `SYNC_INTERVAL` | `60` | 后台同步间隔（秒），`0` 表示关闭定时同步 |
 | `FETCH_TIMEOUT` | `15000` | 抓取元数据超时（毫秒） |
 | `ARCHIVE_ENGINE` | `auto` | `auto` / `singlefile` / `basic` / `off` |
+| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | 启用的存档格式，逗号分隔，可选 `wayback` |
+| `ARCHIVE_WAYBACK` | `false` | 是否把页面提交到 Wayback Machine |
 | `ARCHIVE_BROWSER_PATH` | 自动探测 | Chrome/Chromium 可执行文件路径 |
 | `ARCHIVE_BROWSER_ARGS` | - | 浏览器启动参数，逗号分隔（Docker 中为 `--no-sandbox,--disable-dev-shm-usage`） |
 | `ARCHIVE_TIMEOUT` | `90000` | 单次存档超时（毫秒） |

@@ -21,11 +21,15 @@ import {
 } from './metadata.js';
 import {
   captureArchive,
+  capturePdf,
+  captureScreenshot,
   gzipHtml,
   gunzipHtml,
   resolveArchiveAvailability,
+  sendToWayback,
   type ArchiveAvailability,
 } from './archive.js';
+import { extractReadable } from './readable.js';
 import { parseJsonImport, parseNetscapeBookmarks, type ImportedEntry } from './importer.js';
 import { logger } from '../logger.js';
 
@@ -333,39 +337,139 @@ export class DataService {
   private async runArchiveTask(id: string): Promise<void> {
     const link = this.store.findById(id);
     if (!link) return;
-    const relPath = `archives/${id}.html.gz`;
+    const base = `archives/${id}`;
+    const filePaths: Record<'html' | 'readable' | 'screenshot' | 'pdf', string> = {
+      html: `${base}.html.gz`,
+      readable: `${base}.txt.gz`,
+      screenshot: `${base}.png`,
+      pdf: `${base}.pdf`,
+    };
+    const written: string[] = [];
+    const sizes: Partial<Record<'html' | 'readable' | 'screenshot' | 'pdf', number>> = {};
+    const errors: Record<string, string> = {};
+    let htmlEngine: 'singlefile' | 'basic' | null = null;
+    let waybackUrl: string | null = null;
+
+    const fail = (format: string, err: unknown): void => {
+      errors[format] = (err as Error).message.slice(0, 300);
+      logger.warn(`${format} 存档失败 ${link.url}: ${errors[format]}`);
+    };
+
     try {
       const availability = this.archiveAvailability();
-      const { html, engine } = await captureArchive(link.url, this.config, availability);
-      const gzipped = await gzipHtml(html);
+      const formats = new Set(availability.formats);
 
+      if (formats.has('html')) {
+        const { html, engine } = await captureArchive(link.url, this.config, availability);
+        const gzipped = await gzipHtml(html);
+        await fsp.writeFile(this.store.abs(filePaths.html), gzipped);
+        sizes.html = gzipped.length;
+        htmlEngine = engine;
+        written.push(filePaths.html);
+      }
+
+      if (formats.has('readable')) {
+        try {
+          const readable = await extractReadable(link.url, this.config.fetchTimeoutMs);
+          if (readable.text.length === 0) throw new Error('未提取到正文内容');
+          const gzipped = await gzipHtml(readable.text);
+          await fsp.writeFile(this.store.abs(filePaths.readable), gzipped);
+          sizes.readable = gzipped.length;
+          written.push(filePaths.readable);
+        } catch (err) {
+          fail('readable', err);
+        }
+      }
+
+      if (formats.has('screenshot') || formats.has('pdf')) {
+        if (availability.browserPath) {
+          if (formats.has('screenshot')) {
+            try {
+              sizes.screenshot = await captureScreenshot(
+                link.url,
+                this.store.abs(filePaths.screenshot),
+                availability.browserPath,
+                this.config.archiveBrowserArgs,
+                this.config.archiveTimeoutMs
+              );
+              written.push(filePaths.screenshot);
+            } catch (err) {
+              fail('screenshot', err);
+            }
+          }
+          if (formats.has('pdf')) {
+            try {
+              sizes.pdf = await capturePdf(
+                link.url,
+                this.store.abs(filePaths.pdf),
+                availability.browserPath,
+                this.config.archiveBrowserArgs,
+                this.config.archiveTimeoutMs
+              );
+              written.push(filePaths.pdf);
+            } catch (err) {
+              fail('pdf', err);
+            }
+          }
+        } else {
+          const reason = '未找到 Chrome/Chromium，无法生成截图/PDF';
+          if (formats.has('screenshot')) errors.screenshot = reason;
+          if (formats.has('pdf')) errors.pdf = reason;
+        }
+      }
+
+      if (formats.has('wayback')) {
+        waybackUrl = await sendToWayback(link.url, this.config.archiveTimeoutMs);
+        if (!waybackUrl) errors.wayback = 'Wayback Machine 提交失败';
+      }
+
+      if (written.length === 0) {
+        throw new Error(Object.values(errors).join('；') || '没有生成任何存档格式');
+      }
+
+      const summary = Object.keys(sizes).join('+') || 'none';
       await this.mutex.run(async () => {
         const current = this.store.findById(id);
         if (!current) return;
-        await fsp.writeFile(this.store.abs(relPath), gzipped);
         const now = new Date().toISOString();
         const updated: LinkRecord = {
           ...current,
           archivedAt: now,
-          archivePath: relPath,
-          archiveEngine: engine,
           archiveStatus: 'ok',
           archiveError: null,
-          archiveSize: gzipped.length,
+          archivePath: sizes.html !== undefined ? filePaths.html : (current.archivePath ?? null),
+          archiveSize: sizes.html ?? current.archiveSize ?? null,
+          archiveEngine: htmlEngine ?? current.archiveEngine ?? null,
+          readablePath:
+            sizes.readable !== undefined ? filePaths.readable : (current.readablePath ?? null),
+          readableSize: sizes.readable ?? current.readableSize ?? null,
+          screenshotPath:
+            sizes.screenshot !== undefined
+              ? filePaths.screenshot
+              : (current.screenshotPath ?? null),
+          screenshotSize: sizes.screenshot ?? current.screenshotSize ?? null,
+          pdfPath: sizes.pdf !== undefined ? filePaths.pdf : (current.pdfPath ?? null),
+          pdfSize: sizes.pdf ?? current.pdfSize ?? null,
+          waybackUrl: waybackUrl ?? current.waybackUrl ?? null,
+          waybackAt: waybackUrl ? now : (current.waybackAt ?? null),
+          formatErrors: Object.keys(errors).length > 0 ? errors : null,
           updatedAt: now,
         };
         const changed = await this.store.putLink(updated);
-        await this.repo.commit([...changed, relPath], `archive: save ${shorten(current.title)} (${engine})`);
+        await this.repo.commit(
+          [...changed, ...written],
+          `archive: save ${shorten(current.title)} (${summary})`
+        );
         this.schedulePush();
       });
-      logger.info(`存档完成 ${link.url} (${engine}, ${Math.round(gzipped.length / 1024)} KB)`);
+      logger.info(`存档完成 ${link.url} [${summary}]`);
     } catch (err) {
       const message = (err as Error).message.slice(0, 1000);
       logger.warn(`存档失败 ${link.url}: ${message}`);
 
       // 存档内容已落盘、仅提交失败时，重试提交而不是标记失败
       const settled = this.store.findById(id);
-      if (settled?.archiveStatus === 'ok' && fs.existsSync(this.store.abs(relPath))) {
+      if (settled?.archiveStatus === 'ok' && written.length > 0) {
         try {
           await this.mutex.run(async () => {
             const changed = await this.store.putLink({
@@ -373,8 +477,8 @@ export class DataService {
               updatedAt: new Date().toISOString(),
             });
             await this.repo.commit(
-              [...changed, relPath],
-              `archive: save ${shorten(settled.title)} (${settled.archiveEngine ?? 'unknown'})`
+              [...changed, ...written],
+              `archive: save ${shorten(settled.title)}`
             );
             this.schedulePush();
           });
@@ -404,10 +508,30 @@ export class DataService {
   }
 
   async readArchive(id: string): Promise<string> {
+    const { data } = await this.readArchiveFormat(id, 'html');
+    return data.toString('utf8');
+  }
+
+  async readArchiveFormat(
+    id: string,
+    format: 'html' | 'readable' | 'screenshot' | 'pdf'
+  ): Promise<{ data: Buffer; contentType: string }> {
     const link = this.requireLink(id);
-    if (!link.archivePath) throw new HttpError(404, '该链接还没有存档');
-    const buffer = await fsp.readFile(this.store.abs(link.archivePath));
-    return gunzipHtml(buffer);
+    const table = {
+      html: { path: link.archivePath, type: 'text/html; charset=utf-8', gzipped: true },
+      readable: { path: link.readablePath, type: 'text/plain; charset=utf-8', gzipped: true },
+      screenshot: { path: link.screenshotPath, type: 'image/png', gzipped: false },
+      pdf: { path: link.pdfPath, type: 'application/pdf', gzipped: false },
+    } as const;
+    const entry = table[format];
+    if (!entry || !entry.path) {
+      throw new HttpError(404, `该链接没有 ${format} 格式的存档`);
+    }
+    const buffer = await fsp.readFile(this.store.abs(entry.path));
+    return {
+      data: entry.gzipped ? Buffer.from(await gunzipHtml(buffer)) : buffer,
+      contentType: entry.type,
+    };
   }
 
   // ---------------------------------------------------------------- 收藏夹

@@ -907,6 +907,52 @@ textarea {
   background: #fff;
 }
 
+.archive-image {
+  max-width: 100%;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.format-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.format-tab {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.format-tab:hover {
+  color: var(--text);
+  border-color: #3a4352;
+}
+
+.format-tab.active {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: #cfddff;
+}
+
+.reader {
+  max-height: 70vh;
+  overflow-y: auto;
+  line-height: 1.8;
+  font-size: 14.5px;
+}
+
+.reader p {
+  margin: 0 0 14px;
+}
+
 /* ---------------------------------------------------------------- 登录页 */
 
 .login-page {

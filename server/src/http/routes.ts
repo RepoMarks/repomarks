@@ -168,14 +168,24 @@ export function createRouter(service: DataService, auth: Auth): Router {
   router.get(
     '/links/:id/archive',
     wrap(async (req, res) => {
-      const html = await service.readArchive(req.params.id);
-      res.setHeader('content-type', 'text/html; charset=utf-8');
-      res.setHeader(
-        'content-security-policy',
-        "default-src 'none'; img-src * data: blob:; media-src * data: blob:; style-src 'unsafe-inline' *; font-src * data:; script-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
-      );
+      const format = (str(req.query.format) ?? 'html') as
+        | 'html'
+        | 'readable'
+        | 'screenshot'
+        | 'pdf';
+      if (!['html', 'readable', 'screenshot', 'pdf'].includes(format)) {
+        throw new HttpError(400, `不支持的存档格式: ${format}`);
+      }
+      const { data, contentType } = await service.readArchiveFormat(req.params.id, format);
+      if (format === 'html') {
+        res.setHeader(
+          'content-security-policy',
+          "default-src 'none'; img-src * data: blob:; media-src * data: blob:; style-src 'unsafe-inline' *; font-src * data:; script-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
+        );
+      }
+      res.setHeader('content-type', contentType);
       res.setHeader('x-content-type-options', 'nosniff');
-      res.send(html);
+      res.send(data);
     })
   );
 

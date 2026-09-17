@@ -25,6 +25,9 @@ function bool(name: string, fallback: boolean): boolean {
 }
 
 export type ArchiveEngine = 'auto' | 'singlefile' | 'basic' | 'off';
+export type ArchiveFormat = 'html' | 'readable' | 'screenshot' | 'pdf' | 'wayback';
+
+const ARCHIVE_FORMAT_VALUES: ArchiveFormat[] = ['html', 'readable', 'screenshot', 'pdf', 'wayback'];
 
 export interface Config {
   repoUrl: string;
@@ -41,6 +44,8 @@ export interface Config {
   syncIntervalMs: number;
   fetchTimeoutMs: number;
   archiveEngine: ArchiveEngine;
+  archiveFormats: ArchiveFormat[];
+  archiveWayback: boolean;
   archiveBrowserPath: string;
   archiveBrowserArgs: string[];
   archiveTimeoutMs: number;
@@ -81,6 +86,13 @@ export function loadConfig(): Config {
     syncIntervalMs: Math.max(0, num('SYNC_INTERVAL', 60)) * 1000,
     fetchTimeoutMs: num('FETCH_TIMEOUT', 15000),
     archiveEngine: (str('ARCHIVE_ENGINE', 'auto') as ArchiveEngine) ?? 'auto',
+    archiveFormats: str('ARCHIVE_FORMATS', 'html,readable,screenshot,pdf')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter((value): value is ArchiveFormat =>
+        ARCHIVE_FORMAT_VALUES.includes(value as ArchiveFormat)
+      ),
+    archiveWayback: bool('ARCHIVE_WAYBACK', false),
     archiveBrowserPath: str('ARCHIVE_BROWSER_PATH'),
     archiveBrowserArgs: str('ARCHIVE_BROWSER_ARGS')
       .split(',')
