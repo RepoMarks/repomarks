@@ -1,85 +1,90 @@
 # RepoMarks
 
-自部署的链接管理器（类似 [Linkwarden](https://github.com/linkwarden/linkwarden)），但**所有数据都存放在你自己的 Git 仓库里**（GitHub / Gitea / GitLab 均可），不需要数据库，也不依赖任何托管服务。
+**English** · [中文](README-CN.md)
 
-服务只做三件事：把数据仓库 clone 到本地、读写 JSON 文件、把改动 commit & push 回去。备份 = 仓库本身，历史 = git log，迁移 = 换个仓库地址。
+A self-hosted bookmark manager (in the spirit of [Linkwarden](https://github.com/linkwarden/linkwarden)) where **all data lives in your own Git repository** on GitHub, Gitea, or GitLab. No database, no managed backend, no lock-in.
 
-## 功能
+The service clones your data repository locally, reads and writes plain files, and commits/pushes the changes back. Your backup is the repository itself, your audit log is `git log`, and migrating means pointing the app at another repo URL.
 
-- 链接增删改查，自动抓取标题 / 描述 / 站点名 / favicon / OG 封面图
-- 收藏夹（支持多级目录）、标签、置顶、备注、全文搜索（支持 `tag:` 前缀）
-- **多格式网页存档**（gzip 压缩后存进仓库），详情页用标签页切换查看：
-  - `html`：单文件 HTML 完整存档，有 Chrome/Chromium 时用 [single-file-cli](https://github.com/gildas-lormeau/single-file-cli)（含图片/样式内联），没有浏览器时自动退化为轻量内联存档
-  - `readable`：正文提取（类似 Reader Mode），适合阅读
-  - `screenshot`：全页截图 PNG（需要 Chrome/Chromium）
-  - `pdf`：打印为 PDF（需要 Chrome/Chromium）
-  - `wayback`：提交到 Wayback Machine 并保存快照地址（可选，`ARCHIVE_WAYBACK=true`）
-- 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
-- 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`
-- 单用户密码登录（`AUTH_PASSWORD`）
-- 后台定时同步 + 写入后自动推送；多端同时修改时按 id 做语义合并（更新时间新者胜）
+## Features
 
-## 工作原理
+- Add, edit, and delete links with automatic metadata scraping (title, description, site name, favicon, OG image)
+- Collections (nested), tags, pinning, notes, and full-text search (supports `tag:` / `is:archived` prefixes)
+- **Multi-format page preservation**, stored gzip-compressed inside the repo and viewable in the app:
+  - `html` — single-file HTML archive; uses [single-file-cli](https://github.com/gildas-lormeau/single-file-cli) when Chrome/Chromium is available, otherwise falls back to a lightweight inliner
+  - `readable` — reader-mode text extraction
+  - `screenshot` — full-page PNG (requires Chrome/Chromium)
+  - `pdf` — print-to-PDF (requires Chrome/Chromium)
+  - `wayback` — submit the page to the Wayback Machine and store the snapshot URL (opt-in)
+- Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports (including Linkwarden); folders become collections and duplicate URLs are skipped
+- Export everything as JSON; all data files are human-readable and can be edited by hand before `git push`
+- Single-user password authentication
+- Background sync and automatic push after writes; concurrent edits are merged semantically (newest `updatedAt` wins)
 
-```
-浏览器 ──HTTP──> RepoMarks 服务 ──git pull/push──> 数据仓库 (GitHub/Gitea/...)
-                     │
-                     ├── 本地 clone (DATA_DIR)
-                     ├── 内存索引（搜索/标签/收藏夹）
-                     └── archives/ 网页存档 (html.gz)
-```
-
-写入流程：写文件 → `git commit` → 异步 push。push 被拒绝（远端有新提交）时自动 fetch + merge；`links/*.jsonl` 与 `collections.json` 冲突走语义合并（按 `id` 求并集，`updatedAt` 较新的记录优先），合并后再重试 push。单用户场景下基本不会产生冲突。
-
-## 数据仓库里的结构
+## How it works
 
 ```
-meta.json              仓库元信息
-collections.json       收藏夹（JSON 数组）
-links/0000.jsonl       链接分片，每片 1000 条，每行一条 JSON 记录
+Browser ──HTTP──> RepoMarks service ──git pull/push──> data repository (GitHub/Gitea/GitLab)
+                       │
+                       ├── local clone (DATA_DIR)
+                       ├── in-memory index (search / tags / collections)
+                       └── archives/ (html.gz, txt.gz, png, pdf)
+```
+
+On write: files are updated, committed locally, then pushed asynchronously. If the push is rejected (the remote moved ahead), the service fetches and merges; conflicts in `links/*.jsonl` and `collections.json` are resolved semantically (union of records by `id`, newest `updatedAt` wins) and the push is retried. In single-user use conflicts are rare.
+
+## Data layout in the repository
+
+```
+meta.json               repository metadata
+collections.json        collections (JSON array)
+links/0000.jsonl        link shards, 1000 records per file, one JSON record per line
 links/0001.jsonl
-archives/<id>.html.gz  网页存档（gzip 压缩的单文件 HTML）
+archives/<id>.html.gz   preserved HTML
+archives/<id>.txt.gz    reader-mode text
+archives/<id>.png       screenshot
+archives/<id>.pdf       PDF print
 ```
 
-> 为什么用分片 JSONL：一万条链接只有 10 个文件，clone/pull 快；新增/修改只产生一行 diff；同时可读可 grep，也能直接用编辑器改。
+> Why sharded JSONL: 10,000 links fit in ~10 files, so clones stay fast; adding or editing a link produces a one-line diff; and the files remain readable, greppable, and editable in any text editor.
 
-## 快速开始
+## Quick start
 
-### 1. 准备数据仓库
+### 1. Prepare a data repository
 
-1. 在 GitHub / Gitea / GitLab 新建一个**私有仓库**（可以是空仓库），例如 `link-data`
-2. 按 [获取访问令牌](#获取访问令牌) 创建最小权限的令牌
-3. 记下仓库地址，例如 `https://github.com/yourname/link-data.git`
+1. Create a **private** repository on GitHub / Gitea / GitLab (it can be empty), e.g. `link-data`
+2. Create a minimal access token — see [Access tokens](#access-tokens)
+3. Note the repository URL, e.g. `https://github.com/you/link-data.git`
 
-### 2. 配置并启动
+### 2. Run with Node
 
 ```bash
 cp .env.example .env
-# 编辑 .env，至少填写 REPO_URL、GIT_TOKEN、AUTH_PASSWORD
+# edit .env: at minimum REPO_URL, GIT_TOKEN, AUTH_PASSWORD
 npm install
 npm run build
 npm start
 ```
 
-打开 `http://localhost:3000`，输入 `AUTH_PASSWORD` 登录即可。
+Open `http://localhost:3000` and sign in with `AUTH_PASSWORD`.
 
-### 3. Docker 部署（推荐）
+### 3. Run with Docker (recommended)
 
-直接使用已发布的镜像（amd64 / arm64）：
+Use the published image (amd64 / arm64):
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填仓库信息
+# edit .env with your repository information
 docker compose up -d
 ```
 
-或从源码构建：
+Or build from source:
 
 ```bash
 docker compose up -d --build
 ```
 
-也可以不用 compose：
+Without compose:
 
 ```bash
 docker run -d --name repomarks -p 3000:3000 \
@@ -90,143 +95,128 @@ docker run -d --name repomarks -p 3000:3000 \
   ghcr.io/repomarks/repomarks:latest
 ```
 
-镜像基于 Alpine，自带 `git` 和 `chromium`，网页存档默认就是完整存档模式，数据目录挂载在 `./data`。
+The image is Alpine-based and ships with `git` and `chromium`, so full-fidelity preservation (single-file HTML, screenshots, PDFs) works out of the box. Data is stored in `./data`.
 
-镜像标签：`latest`（最新 release）、`vX.Y.Z` / `vX.Y`（版本号）、`main`、`sha-xxxxxxxx`。
+Image tags: `latest` (latest release), `vX.Y.Z` / `vX.Y` (versions), `main`, `sha-xxxxxxxx`.
 
-## 获取访问令牌
+## Access tokens
 
-服务通过 HTTPS + 令牌读写数据仓库。令牌只保存在 `.env`（已被 .gitignore 排除），不会写进 `.git/config`、浏览器或数据仓库。
+The service reads and writes the data repository over HTTPS using a token. The token is stored only in `.env` (git-ignored) and is never written into `.git/config`, the browser, or the data repository.
 
-### GitHub（推荐 Fine-grained token）
+### GitHub (fine-grained token recommended)
 
-1. 打开 https://github.com/settings/personal-access-tokens/new
-   （或：头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token）
-2. **Token name** 随意，例如 `repomarks`
-3. **Expiration** 选 90 天或自定义；到期后重新生成并在 `.env` 里替换即可
-4. **Repository access** 选 `Only select repositories`，只勾选你的数据仓库
-5. **Permissions → Repository permissions → Contents** 设为 `Read and write`
-   （`Metadata` 会自动变成只读，其它权限全部保持 `No access`）
-6. 点 **Generate token**，复制 `github_pat_...`（只显示这一次）→ 填到 `.env` 的 `GIT_TOKEN`
-7. `GIT_USERNAME` 保持默认的 `x-access-token`
+1. Open https://github.com/settings/personal-access-tokens/new
+   (or: avatar → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token)
+2. **Token name**: anything, e.g. `repomarks`
+3. **Expiration**: 90 days or a custom value; regenerate and update `.env` when it expires
+4. **Repository access**: `Only select repositories` → select only your data repository
+5. **Permissions → Repository permissions → Contents**: `Read and write`
+   (`Metadata` becomes read-only automatically; leave every other permission at `No access`)
+6. Click **Generate token** and copy `github_pat_...` (shown only once) into `GIT_TOKEN`
+7. Keep `GIT_USERNAME=x-access-token` (the default)
 
-> 也可以使用 Classic token（https://github.com/settings/tokens/new，勾选 `repo` 范围），但权限覆盖你名下所有仓库，安全性不如细粒度令牌。
+> Classic tokens (https://github.com/settings/tokens/new, `repo` scope) also work, but they grant access to all your repositories. Prefer fine-grained tokens.
 
 ### Gitea
 
-1. 右上角头像 → 设置 → 应用 → 管理 Access Tokens
-   （或直接访问 `https://你的gitea域名/user/settings/applications`）
-2. 名称随意，权限只勾选 `repository` 的 **Read and Write**
-3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
-4. `GIT_USERNAME` 填你的 Gitea 用户名
+1. Avatar → Settings → Applications → Manage Access Tokens
+   (or `https://your-gitea.example.com/user/settings/applications`)
+2. Name it anything and select only `repository` **Read and Write**
+3. Copy the generated token into `GIT_TOKEN`
+4. Set `GIT_USERNAME` to your Gitea username
 
 ### GitLab
 
-1. 头像 → Edit profile → Access tokens
-   （或 https://gitlab.com/-/user_settings/personal_access_tokens）
-2. 勾选 **`write_repository`** 范围（自动包含 `read_repository`）并设置有效期
-3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
-4. `GIT_USERNAME=oauth2`
+1. Avatar → Edit profile → Access tokens
+   (or https://gitlab.com/-/user_settings/personal_access_tokens)
+2. Select the **`write_repository`** scope (this includes `read_repository`), set an expiry
+3. Copy the token into `GIT_TOKEN`
+4. Set `GIT_USERNAME=oauth2`
 
-### SSH 方式（不想用令牌）
+### SSH instead of a token
 
-生成或复用已有密钥后，在 `.env` 里配置：
+Generate or reuse a key pair, then set:
 
 ```ini
 REPO_URL=git@github.com:you/link-data.git
-GIT_SSH_KEY=/path/to/id_ed25519    # Docker 部署需把密钥挂载进容器
-GIT_TOKEN=                          # 留空
+GIT_SSH_KEY=/path/to/id_ed25519    # mount the key into the container for Docker deployments
+GIT_TOKEN=                          # leave empty
 ```
 
-### 安全建议
+### Security notes
 
-- 令牌只授予这一个数据仓库的最小权限，不要用账号全量权限的令牌
-- 怀疑泄露时，在平台撤销旧令牌并生成新的，更新 `.env` 后重启服务即可
-- 数据仓库建议设为私有；服务本身不要直接暴露公网，需要时放在反向代理后面
+- Grant the token access to this one data repository only, with the minimum permissions
+- If a token leaks, revoke it on the platform, generate a new one, update `.env`, and restart the service
+- Keep the data repository private, and do not expose the service directly to the internet; put it behind a reverse proxy if needed
 
-## 开发
+## Development
 
 ```bash
 npm install
-npm run dev        # 后端 :3000（tsx watch）+ 前端 :5173（Vite，/api 自动代理）
+npm run dev        # backend on :3000 (tsx watch) + frontend on :5173 (Vite, /api proxied)
 npm run typecheck
 npm run build
-npm run smoke      # 冒烟测试：核心同步流程 + HTTP 全链路（用临时 bare 仓库，不影响真实数据）
+npm run smoke      # smoke tests: core git sync + HTTP API (uses temporary bare repos, safe)
 ```
 
-针对真实 GitHub 仓库的端到端测试（会创建临时数据目录，往指定仓库读写测试数据）：
+An end-to-end test against a real GitHub repository is also available (it writes test data to the given repo):
 
 ```bash
-# REPO_URL 指向一个用于测试的私有仓库，GIT_TOKEN 需有该仓库 Contents 读写权限
+# REPO_URL must point to a test repository, GIT_TOKEN needs Contents read/write on it
 REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/github-e2e.mjs
 ```
 
-## 环境变量
+## Environment variables
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `REPO_URL` | 必填 | 数据仓库地址（https 或 ssh） |
-| `GIT_TOKEN` | - | HTTPS 访问令牌；SSH 方式可留空 |
-| `GIT_USERNAME` | `x-access-token` | HTTPS Basic 用户名：GitHub 保持默认，Gitea 填用户名，GitLab 填 `oauth2` |
-| `GIT_BRANCH` | `main` | 分支 |
-| `GIT_SSH_KEY` | - | SSH 私钥路径（仅 SSH 方式） |
-| `DATA_DIR` | `./data` | 本地 clone 目录（Docker 中为 `/data`） |
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | 监听地址 |
-| `AUTH_PASSWORD` | - | 访问密码，留空则不启用登录（不建议） |
-| `SESSION_SECRET` | 派生值 | 会话签名密钥，留空则按密码+仓库地址派生 |
-| `SHARD_SIZE` | `1000` | 每个 JSONL 分片的记录数 |
-| `SYNC_INTERVAL` | `60` | 后台同步间隔（秒），`0` 表示关闭定时同步 |
-| `FETCH_TIMEOUT` | `15000` | 抓取元数据超时（毫秒） |
+| `REPO_URL` | required | Data repository URL (HTTPS or SSH) |
+| `GIT_TOKEN` | - | HTTPS access token; leave empty for SSH |
+| `GIT_USERNAME` | `x-access-token` | HTTPS username: keep the default for GitHub, use your username for Gitea, `oauth2` for GitLab |
+| `GIT_BRANCH` | `main` | Branch |
+| `GIT_SSH_KEY` | - | Path to the SSH private key (SSH only) |
+| `DATA_DIR` | `./data` | Local clone directory (`/data` in Docker) |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | Listen address |
+| `AUTH_PASSWORD` | - | Login password; leaving it empty disables authentication (not recommended) |
+| `SESSION_SECRET` | derived | Session signing secret; derived from password + repo URL when empty |
+| `SHARD_SIZE` | `1000` | Records per JSONL shard |
+| `SYNC_INTERVAL` | `60` | Background sync interval in seconds; `0` disables it |
+| `FETCH_TIMEOUT` | `15000` | Metadata fetch timeout in milliseconds |
 | `ARCHIVE_ENGINE` | `auto` | `auto` / `singlefile` / `basic` / `off` |
-| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | 启用的存档格式，逗号分隔，可选 `wayback` |
-| `ARCHIVE_WAYBACK` | `false` | 是否把页面提交到 Wayback Machine |
-| `ARCHIVE_BROWSER_PATH` | 自动探测 | Chrome/Chromium 可执行文件路径 |
-| `ARCHIVE_BROWSER_ARGS` | - | 浏览器启动参数，逗号分隔（Docker 中为 `--no-sandbox,--disable-dev-shm-usage`） |
-| `ARCHIVE_TIMEOUT` | `90000` | 单次存档超时（毫秒） |
-| `ALLOW_PRIVATE_URLS` | `false` | 是否允许抓取内网地址（默认禁止，防 SSRF） |
-| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | 提交作者信息 |
+| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | Enabled preservation formats (comma-separated; `wayback` is also accepted) |
+| `ARCHIVE_WAYBACK` | `false` | Submit pages to the Wayback Machine |
+| `ARCHIVE_BROWSER_PATH` | auto-detected | Path to Chrome/Chromium (for full archives and screenshots/PDFs) |
+| `ARCHIVE_BROWSER_ARGS` | - | Extra browser arguments, comma-separated (`--no-sandbox,--disable-dev-shm-usage` in Docker) |
+| `ARCHIVE_TIMEOUT` | `90000` | Timeout per preservation operation in milliseconds |
+| `ALLOW_PRIVATE_URLS` | `false` | Allow fetching private/internal addresses (disabled to prevent SSRF) |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | Commit author for data repository commits |
 
 ## API
 
-| 方法 | 路径 | 说明 |
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| POST | `/api/auth/login` | 登录，body `{password}` |
-| GET | `/api/links` | 搜索，参数 `q`、`collection`、`tag`、`archived`、`sort`、`order`、`page`、`perPage` |
-| POST | `/api/links` | 新建链接，`fetchMetadata: false` 可跳过抓取 |
-| PATCH / DELETE | `/api/links/:id` | 修改 / 删除 |
-| POST | `/api/links/:id/archive` | 触发网页存档（异步） |
-| GET | `/api/links/:id/archive` | 查看存档 HTML |
-| POST | `/api/links/:id/refetch` | 重新抓取元数据 |
-| GET / POST | `/api/collections` | 收藏夹列表 / 新建 |
-| PATCH / DELETE | `/api/collections/:id` | 修改 / 删除 |
-| GET | `/api/tags` | 标签及计数 |
-| POST | `/api/import` | 导入，body `{html}` 或 `{json}` |
-| GET | `/api/export` | 导出全部数据 JSON |
-| GET | `/api/status` | 仓库状态、同步状态、存档引擎、统计 |
-| POST | `/api/sync` | 手动同步（pull + push） |
+| POST | `/api/auth/login` | Log in with `{password}` |
+| GET | `/api/links` | Search with `q`, `collection`, `tag`, `archived`, `sort`, `order`, `page`, `perPage` |
+| POST | `/api/links` | Create a link; `fetchMetadata: false` skips metadata scraping |
+| PATCH / DELETE | `/api/links/:id` | Update / delete a link |
+| POST | `/api/links/:id/archive` | Start preservation (asynchronous) |
+| GET | `/api/links/:id/archive` | View the HTML archive; add `?format=readable\|screenshot\|pdf` for other formats |
+| POST | `/api/links/:id/refetch` | Re-scrape metadata |
+| GET / POST | `/api/collections` | List / create collections |
+| PATCH / DELETE | `/api/collections/:id` | Update / delete a collection |
+| GET | `/api/tags` | Tags with counts |
+| POST | `/api/import` | Import `{html}` or `{json}` |
+| GET | `/api/export` | Export all data as JSON |
+| GET | `/api/status` | Repository status, sync state, preservation engine, stats |
+| POST | `/api/sync` | Manual sync (pull + push) |
 
-## 已知限制
+## Known limitations
 
-- **单用户**：一份部署对应一个密码、一个仓库；多人协作场景建议拆多个实例
-- **存档体积**：完整存档会让仓库变大（取决于网页），仓库膨胀后 clone 会变慢；可以只对重要链接存档
-- **无浏览器时**：轻量存档的内联质量有限，复杂的 SPA 页面效果一般；Docker 镜像已内置 chromium
-- **冲突合并**：按 `updatedAt` 新者胜，同一字段在两端的并发修改不会逐字段合并
-- 抓取目标站点的反爬（403/验证码）会导致元数据或存档失败，界面会显示失败原因
-
-## 发布流程（CI/CD）
-
-- **CI**（`.github/workflows/ci.yml`）：PR 上自动跑类型检查、构建、冒烟测试，并验证 Dockerfile 能构建
-- **发布**（`.github/workflows/docker.yml`）：
-  - push 到 `main`：跑测试后构建 `linux/amd64` 镜像，打上 `main` 和 `sha-xxxxxxx` 标签
-  - push `v*` 标签：构建 `linux/amd64` + `linux/arm64` 多架构镜像，打上 `vX.Y.Z`、`vX.Y`、`vX` 和 `latest` 标签
-  - 也可以在 Actions 页面手动触发（workflow_dispatch）
-
-发版只需：
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+- **Single user**: one deployment serves one password and one repository; run multiple instances for multiple users
+- **Archive size**: full-fidelity archives can grow the repository; clone times grow with it, so preserve selectively
+- **Without a browser**: the lightweight inliner is limited and complex SPAs may not render well; the Docker image ships with chromium
+- **Conflict merging**: newest `updatedAt` wins per record; concurrent edits to the same fields are not merged field by field
+- Anti-bot protections (403 / CAPTCHA) on target sites can make metadata scraping or preservation fail; the UI shows the error
 
 ## License
 
