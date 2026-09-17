@@ -93,7 +93,7 @@ export class DataService {
     await this.repo.init();
     const created = await this.store.load();
     if (created.length > 0) {
-      await this.repo.commit(created, 'init: 初始化数据仓库');
+      await this.repo.commit(created, 'init: initialize data repository');
     }
     try {
       const outcome = await this.runSync();
@@ -137,7 +137,7 @@ export class DataService {
       this.syncState.syncing = true;
       try {
         if (await this.repo.isDirty()) {
-          await this.repo.commitAll('chore: 提交未保存的改动');
+          await this.repo.commitAll('chore: commit pending changes');
         }
         const outcome = await this.repo.sync();
         if (outcome.changed) {
@@ -234,7 +234,7 @@ export class DataService {
         archiveStatus: 'none',
       };
       const changed = await this.store.addLink(record);
-      await this.repo.commit(changed, `link: 添加 ${shorten(record.title)}`);
+      await this.repo.commit(changed, `link: add ${shorten(record.title)}`);
       this.schedulePush();
       return record;
     });
@@ -265,7 +265,7 @@ export class DataService {
       updated.updatedAt = new Date().toISOString();
 
       const changed = await this.store.putLink(updated);
-      await this.repo.commit(changed, `link: 更新 ${shorten(updated.title)}`);
+      await this.repo.commit(changed, `link: update ${shorten(updated.title)}`);
       this.schedulePush();
       return updated;
     });
@@ -279,7 +279,7 @@ export class DataService {
       if (link.archivePath) {
         changed.push(...(await this.store.deleteArchiveFile(link.archivePath)));
       }
-      await this.repo.commit(changed, `link: 删除 ${shorten(link.title)}`);
+      await this.repo.commit(changed, `link: delete ${shorten(link.title)}`);
       this.schedulePush();
     });
   }
@@ -301,7 +301,7 @@ export class DataService {
         updatedAt: new Date().toISOString(),
       };
       const changed = await this.store.putLink(updated);
-      await this.repo.commit(changed, `link: 重新抓取 ${shorten(updated.title)}`);
+      await this.repo.commit(changed, `link: refetch ${shorten(updated.title)}`);
       this.schedulePush();
       return updated;
     });
@@ -323,7 +323,7 @@ export class DataService {
     };
     await this.mutex.run(async () => {
       const changed = await this.store.putLink(pending);
-      await this.repo.commit(changed, `archive: 开始存档 ${shorten(link.title)}`);
+      await this.repo.commit(changed, `archive: start ${shorten(link.title)}`);
       this.schedulePush();
     });
     void this.runArchiveTask(id);
@@ -355,7 +355,7 @@ export class DataService {
           updatedAt: now,
         };
         const changed = await this.store.putLink(updated);
-        await this.repo.commit([...changed, relPath], `archive: ${engine} 存档 ${shorten(current.title)}`);
+        await this.repo.commit([...changed, relPath], `archive: save ${shorten(current.title)} (${engine})`);
         this.schedulePush();
       });
       logger.info(`存档完成 ${link.url} (${engine}, ${Math.round(gzipped.length / 1024)} KB)`);
@@ -374,7 +374,7 @@ export class DataService {
             });
             await this.repo.commit(
               [...changed, relPath],
-              `archive: ${settled.archiveEngine ?? ''} 存档 ${shorten(settled.title)}`
+              `archive: save ${shorten(settled.title)} (${settled.archiveEngine ?? 'unknown'})`
             );
             this.schedulePush();
           });
@@ -396,7 +396,7 @@ export class DataService {
             updatedAt: new Date().toISOString(),
           };
           const changed = await this.store.putLink(updated);
-          await this.repo.commit(changed, `archive: 失败 ${shorten(current.title)}`);
+          await this.repo.commit(changed, `archive: failed ${shorten(current.title)}`);
           this.schedulePush();
         })
         .catch((writeErr) => logger.error('写入存档失败状态出错', (writeErr as Error).message));
@@ -428,7 +428,7 @@ export class DataService {
       };
       this.store.collections.set(collection.id, collection);
       const changed = await this.store.saveCollections();
-      await this.repo.commit(changed, `collection: 新建 ${shorten(name)}`);
+      await this.repo.commit(changed, `collection: create ${shorten(name)}`);
       this.schedulePush();
       return collection;
     });
@@ -462,7 +462,7 @@ export class DataService {
       }
       this.store.collections.set(id, updated);
       const changed = await this.store.saveCollections();
-      await this.repo.commit(changed, `collection: 更新 ${shorten(updated.name)}`);
+      await this.repo.commit(changed, `collection: update ${shorten(updated.name)}`);
       this.schedulePush();
       return updated;
     });
@@ -489,7 +489,7 @@ export class DataService {
         for (const path of await this.store.putLinksBulk(updated)) paths.add(path);
       }
 
-      await this.repo.commit([...paths], `collection: 删除 ${shorten(collection.name)}`);
+      await this.repo.commit([...paths], `collection: delete ${shorten(collection.name)}`);
       this.schedulePush();
     });
   }
@@ -597,7 +597,7 @@ export class DataService {
         for (const path of await this.store.addLinksBulk(records)) paths.add(path);
       }
       if (paths.size > 0) {
-        await this.repo.commit([...paths], `import: 导入 ${records.length} 条链接`);
+        await this.repo.commit([...paths], `import: add ${records.length} links`);
         this.schedulePush();
       }
       return { linksAdded: records.length, linksSkipped: skipped, collectionsCreated };
