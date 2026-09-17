@@ -125,6 +125,19 @@ async function main(): Promise<void> {
     throw new Error('A 未合并 B 的记录');
   }
 
+  // 回归测试：修改远端仓库地址后，应把本地已有数据推送到新的空远端
+  const newRemote = path.join(base, 'migrated.git');
+  fs.mkdirSync(newRemote, { recursive: true });
+  execFileSync('git', ['init', '--bare', '-b', 'main', newRemote], { stdio: 'ignore' });
+  const repoMigrated = new GitRepo(dirA, newRemote, 'main', 'test', 'test@local');
+  await repoMigrated.init();
+  await repoMigrated.sync();
+  const migratedLog = execFileSync('git', ['--git-dir', newRemote, 'log', '--oneline'], {
+    encoding: 'utf8',
+  }).trim();
+  if (!migratedLog) throw new Error('切换远端后未推送数据');
+  console.log('remote migration ok, new remote commits:', migratedLog.split('\n').length);
+
   await a.deleteLink(link.id);
   await a.runSync();
   console.log('deleted, store A links:', a.store.links.size);

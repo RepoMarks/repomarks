@@ -85,8 +85,7 @@ export class GitRepo {
       await this.git.ensureIdentity();
     }
 
-    await this.fetch();
-    const hasRemote = await this.refExists(this.remoteRef());
+    const hasRemote = await this.fetch();
     const hasLocal = await this.hasCommits();
     if (hasRemote && !hasLocal) {
       await this.git.run(['reset', '--hard', `origin/${this.branch}`]);
@@ -98,11 +97,15 @@ export class GitRepo {
     return `refs/remotes/origin/${this.branch}`;
   }
 
+  /** 拉取远端分支；返回远端是否存在该分支。远端没有时清理陈旧的 origin/<branch> 引用 */
   async fetch(): Promise<boolean> {
-    const res = await this.git.run(['fetch', 'origin', this.branch], { allowFail: true });
+    const res = await this.git.run(['fetch', '--prune', 'origin', this.branch], { allowFail: true });
     if (res.code === 0) return true;
     const text = res.stderr + res.stdout;
-    if (/couldn't find remote ref|could not find remote ref/i.test(text)) return false;
+    if (/couldn't find remote ref|could not find remote ref/i.test(text)) {
+      await this.git.run(['update-ref', '-d', this.remoteRef()], { allowFail: true });
+      return false;
+    }
     throw new Error(`git fetch 失败: ${text.trim()}`);
   }
 
@@ -181,8 +184,7 @@ export class GitRepo {
   /** 先同步远端再推送本地提交；若远端有新提交则合并（支持语义合并冲突） */
   async sync(): Promise<SyncOutcome> {
     const before = await this.head();
-    await this.fetch();
-    const hasRemote = await this.refExists(this.remoteRef());
+    const hasRemote = await this.fetch();
     const hasLocal = before !== null;
     let pushed = false;
     let pulled = false;
