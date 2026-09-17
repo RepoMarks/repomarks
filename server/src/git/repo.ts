@@ -127,7 +127,8 @@ export class GitRepo {
   }
 
   async isDirty(): Promise<boolean> {
-    const out = await this.git.text(['status', '--porcelain']);
+    // --no-optional-locks: 状态查询不写索引，避免与并发提交抢 index.lock
+    const out = await this.git.text(['--no-optional-locks', 'status', '--porcelain']);
     return out.length > 0;
   }
 

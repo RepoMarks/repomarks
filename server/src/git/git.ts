@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { Mutex } from '../util/misc.js';
 
 export interface RunResult {
   code: number;
@@ -25,6 +26,8 @@ function redact(text: string, secrets: string[]): string {
 
 export class Git {
   private secrets: string[];
+  /** 所有 git 进程串行执行，避免 index.lock 冲突（例如状态轮询与提交同时发生） */
+  private mutex = new Mutex();
 
   constructor(private opts: GitOptions) {
     this.secrets = [opts.token ?? '', opts.sshKeyPath ?? ''].filter(Boolean);
@@ -52,6 +55,10 @@ export class Git {
   }
 
   run(args: string[], opts: { allowFail?: boolean } = {}): Promise<RunResult> {
+    return this.mutex.run(() => this.exec(args, opts));
+  }
+
+  private exec(args: string[], opts: { allowFail?: boolean } = {}): Promise<RunResult> {
     const full = [...this.authArgs(), ...args];
     return new Promise((resolve, reject) => {
       const child = spawn('git', full, {

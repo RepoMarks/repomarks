@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import type { Config } from '../config.js';
 import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
@@ -332,11 +333,11 @@ export class DataService {
   private async runArchiveTask(id: string): Promise<void> {
     const link = this.store.findById(id);
     if (!link) return;
+    const relPath = `archives/${id}.html.gz`;
     try {
       const availability = this.archiveAvailability();
       const { html, engine } = await captureArchive(link.url, this.config, availability);
       const gzipped = await gzipHtml(html);
-      const relPath = `archives/${id}.html.gz`;
 
       await this.mutex.run(async () => {
         const current = this.store.findById(id);
@@ -361,6 +362,29 @@ export class DataService {
     } catch (err) {
       const message = (err as Error).message.slice(0, 1000);
       logger.warn(`存档失败 ${link.url}: ${message}`);
+
+      // 存档内容已落盘、仅提交失败时，重试提交而不是标记失败
+      const settled = this.store.findById(id);
+      if (settled?.archiveStatus === 'ok' && fs.existsSync(this.store.abs(relPath))) {
+        try {
+          await this.mutex.run(async () => {
+            const changed = await this.store.putLink({
+              ...settled,
+              updatedAt: new Date().toISOString(),
+            });
+            await this.repo.commit(
+              [...changed, relPath],
+              `archive: ${settled.archiveEngine ?? ''} 存档 ${shorten(settled.title)}`
+            );
+            this.schedulePush();
+          });
+          logger.info(`存档内容已保留，提交重试成功 ${link.url}`);
+          return;
+        } catch (retryErr) {
+          logger.warn(`存档提交重试失败: ${(retryErr as Error).message}`);
+        }
+      }
+
       await this.mutex
         .run(async () => {
           const current = this.store.findById(id);
