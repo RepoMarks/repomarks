@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
-import { Mutex } from '../util/misc.js';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { Mutex, sleep } from '../util/misc.js';
+import { logger } from '../logger.js';
 
 export interface RunResult {
   code: number;
@@ -30,7 +33,12 @@ export class Git {
   private mutex = new Mutex();
 
   constructor(private opts: GitOptions) {
-    this.secrets = [opts.token ?? '', opts.sshKeyPath ?? ''].filter(Boolean);
+    const secrets = [opts.token ?? '', opts.sshKeyPath ?? ''].filter(Boolean);
+    if (opts.token) {
+      const user = opts.username || 'x-access-token';
+      secrets.push(Buffer.from(`${user}:${opts.token}`).toString('base64'));
+    }
+    this.secrets = secrets;
   }
 
   private env(): NodeJS.ProcessEnv {
@@ -48,14 +56,42 @@ export class Git {
   }
 
   private authArgs(): string[] {
-    if (!this.opts.token) return [];
+    // 低速传输 60 秒后主动断开，避免网络异常时卡死
+    const args = ['-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=60'];
+    if (!this.opts.token) return args;
     const user = this.opts.username || 'x-access-token';
     const basic = Buffer.from(`${user}:${this.opts.token}`).toString('base64');
-    return ['-c', `http.extraheader=Authorization: Basic ${basic}`];
+    args.push('-c', `http.extraheader=Authorization: Basic ${basic}`);
+    return args;
   }
 
   run(args: string[], opts: { allowFail?: boolean } = {}): Promise<RunResult> {
-    return this.mutex.run(() => this.exec(args, opts));
+    return this.mutex.run(async () => {
+      try {
+        return await this.exec(args, opts);
+      } catch (err) {
+        if (!/index\.lock/i.test((err as Error).message)) throw err;
+        await this.recoverIndexLock();
+        return this.exec(args, opts);
+      }
+    });
+  }
+
+  /** 进程被杀等情况会残留 index.lock：确认锁已陈旧后清理并重试一次 */
+  private async recoverIndexLock(): Promise<void> {
+    const lockPath = path.join(this.opts.cwd, '.git', 'index.lock');
+    await sleep(700);
+    try {
+      const stat = await fsp.stat(lockPath);
+      if (Date.now() - stat.mtimeMs < 30_000) {
+        logger.warn('检测到较新的 .git/index.lock，等待后重试');
+        return;
+      }
+      await fsp.rm(lockPath, { force: true });
+      logger.warn('已清理陈旧的 .git/index.lock 并重试');
+    } catch {
+      /* 锁已被释放，直接重试即可 */
+    }
   }
 
   private exec(args: string[], opts: { allowFail?: boolean } = {}): Promise<RunResult> {

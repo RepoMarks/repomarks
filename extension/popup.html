@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RepoMarks</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="brand">RepoMarks</span>
+    <span class="hint">Ctrl+Shift+S</span>
+  </header>
+
+  <section id="setup" hidden>
+    <p>RepoMarks is not configured yet.</p>
+    <button id="setup-options" type="button" class="primary open-options">Open settings</button>
+  </section>
+
+  <form id="form" hidden>
+    <label for="url">URL</label>
+    <input id="url" type="text" readonly>
+
+    <label for="title">Title</label>
+    <input id="title" type="text">
+
+    <label for="tags">Tags</label>
+    <input id="tags" type="text" placeholder="comma, separated">
+
+    <label for="description">Description <span class="optional">(optional)</span></label>
+    <textarea id="description" rows="2"></textarea>
+
+    <label for="collection">Collection</label>
+    <select id="collection"></select>
+
+    <div id="status" role="status"></div>
+
+    <div class="actions">
+      <button id="save" type="submit" class="primary">Save</button>
+      <button id="open-options" type="button" class="open-options" hidden>Open settings</button>
+    </div>
+  </form>
+
+  <footer>
+    <a id="open-app" href="#" target="_blank" rel="noreferrer">Open RepoMarks</a>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

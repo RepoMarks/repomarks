@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RepoMarks Settings</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      background: #0f1115;
+      color: #e8ebf1;
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      background: #161a21;
+      border: 1px solid #272e3a;
+      border-radius: 10px;
+      padding: 24px;
+    }
+    h1 { margin: 0 0 4px; font-size: 18px; }
+    p.sub { margin: 0 0 20px; color: #8d97a8; font-size: 13px; }
+    label { display: block; margin-bottom: 6px; font-size: 13px; color: #8d97a8; }
+    input {
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 9px 11px;
+      background: #0f1115;
+      border: 1px solid #272e3a;
+      border-radius: 10px;
+      color: #e8ebf1;
+      font: inherit;
+    }
+    input:focus { outline: none; border-color: #5b8def; }
+    .actions { display: flex; gap: 10px; }
+    button {
+      padding: 9px 16px;
+      border: 1px solid #272e3a;
+      border-radius: 10px;
+      background: #0f1115;
+      color: #e8ebf1;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.primary { background: #5b8def; border-color: #5b8def; color: #0f1115; font-weight: 600; }
+    button:hover { border-color: #5b8def; }
+    #status { min-height: 20px; margin-top: 16px; font-size: 13px; color: #8d97a8; }
+    #status.success { color: #5b8def; }
+    #status.error { color: #f2777a; }
+    .help {
+      margin: 20px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid #272e3a;
+      color: #8d97a8;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>RepoMarks</h1>
+    <p class="sub">Connect the extension to your self-hosted RepoMarks server.</p>
+
+    <label for="server-url">Server URL</label>
+    <input id="server-url" type="url" placeholder="https://bookmarks.example.com" spellcheck="false" autocomplete="off">
+
+    <label for="api-key">API Key</label>
+    <input id="api-key" type="password" spellcheck="false" autocomplete="off">
+
+    <div class="actions">
+      <button id="save" class="primary" type="button">Save</button>
+      <button id="test" type="button">Test connection</button>
+    </div>
+    <div id="status" role="status"></div>
+
+    <p class="help">
+      Create an API key in RepoMarks under Settings &rarr; API keys, then paste it here.
+      The server must be reachable from this browser, including plain HTTP addresses on your local network.
+    </p>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

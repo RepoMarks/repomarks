@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "RepoMarks",
+  "version": "0.1.0",
+  "description": "Save the current tab or a right-clicked link to your self-hosted RepoMarks bookmark server.",
+  "permissions": ["contextMenus", "storage", "activeTab", "notifications"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Save to RepoMarks",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "save-current-tab": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save the current tab to RepoMarks"
+    }
+  }
+}
