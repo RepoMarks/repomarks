@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {
+  ApiKeyRecord,
   Collection,
   LinkRecord,
   RepoMeta,
@@ -11,6 +12,7 @@ import {
 
 const META_FILE = 'meta.json';
 const COLLECTIONS_FILE = 'collections.json';
+const API_KEYS_FILE = 'apikeys.json';
 const LINKS_DIR = 'links';
 const ARCHIVES_DIR = 'archives';
 const NO_COLLECTION = '__none__';
@@ -23,6 +25,7 @@ interface ShardInfo {
 export class LinkStore {
   readonly links = new Map<string, LinkRecord>();
   readonly collections = new Map<string, Collection>();
+  readonly apiKeys = new Map<string, ApiKeyRecord>();
   warnings: string[] = [];
 
   private shards: ShardInfo[] = [];
@@ -65,13 +68,38 @@ export class LinkStore {
 
     this.links.clear();
     this.collections.clear();
+    this.apiKeys.clear();
     this.shards = [];
     this.linkShardIndex.clear();
     this.warnings = [];
 
     await this.loadCollections();
+    await this.loadApiKeys();
     await this.loadShards();
     return created;
+  }
+
+  private async loadApiKeys(): Promise<void> {
+    if (!fs.existsSync(this.abs(API_KEYS_FILE))) {
+      return;
+    }
+    try {
+      const raw = await fsp.readFile(this.abs(API_KEYS_FILE), 'utf8');
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('apikeys.json 不是数组');
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object' || typeof item.id !== 'string') continue;
+        this.apiKeys.set(item.id, item as ApiKeyRecord);
+      }
+    } catch (err) {
+      this.warnings.push(`apikeys.json 解析失败: ${(err as Error).message}`);
+    }
+  }
+
+  async saveApiKeys(): Promise<string[]> {
+    const list = [...this.apiKeys.values()];
+    await this.atomicWrite(API_KEYS_FILE, JSON.stringify(list, null, 2) + '\n');
+    return [API_KEYS_FILE];
   }
 
   private async loadCollections(): Promise<void> {

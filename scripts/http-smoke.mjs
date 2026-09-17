@@ -89,6 +89,29 @@ try {
   cookie = setCookie[0].split(';')[0];
   console.log('4. login ok');
 
+  const createdKey = await req('/api/apikeys', {
+    method: 'POST',
+    body: JSON.stringify({ label: 'smoke' }),
+  });
+  if (createdKey.res.status !== 201 || !createdKey.data.key?.startsWith('rm_')) {
+    fail(`create api key failed: ${createdKey.text}`);
+  }
+  const apiKey = createdKey.data.key;
+  const viaKey = await fetch(`${baseUrl}/api/links`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+  });
+  if (viaKey.status !== 200) fail(`api key auth failed: ${viaKey.status}`);
+  const invalidKey = await fetch(`${baseUrl}/api/links`, {
+    headers: { 'x-api-key': 'rm_invalid' },
+  });
+  if (invalidKey.status !== 401) fail('invalid api key should return 401');
+  await req(`/api/apikeys/${createdKey.data.record.id}`, { method: 'DELETE' });
+  const revokedKey = await fetch(`${baseUrl}/api/links`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+  });
+  if (revokedKey.status !== 401) fail('revoked api key should return 401');
+  console.log('4b. api keys ok');
+
   const created = await req('/api/links', {
     method: 'POST',
     body: JSON.stringify({

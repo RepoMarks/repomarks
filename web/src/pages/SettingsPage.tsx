@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, formatBytes, formatDate } from '../api';
 import { useApp, useMenu } from '../App';
 import { useStatus } from '../hooks';
+import type { ApiKeyInfo } from '../types';
 
 export default function SettingsPage() {
   const openMenu = useMenu();
@@ -9,6 +10,43 @@ export default function SettingsPage() {
   const status = useStatus(refreshKey, 5000);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
+  const [keyLabel, setKeyLabel] = useState('');
+  const [newKey, setNewKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .listApiKeys()
+      .then((keys) => {
+        if (alive) setApiKeys(keys);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+
+  const createKey = async () => {
+    try {
+      const result = await api.createApiKey(keyLabel);
+      setNewKey(result.key);
+      setKeyLabel('');
+      setApiKeys((previous) => [result.record, ...previous]);
+    } catch (err) {
+      window.alert((err as Error).message);
+    }
+  };
+
+  const revokeKey = async (id: string) => {
+    if (!window.confirm('撤销这个 API 密钥？使用它的客户端会立即失效。')) return;
+    try {
+      await api.deleteApiKey(id);
+      setApiKeys((previous) => previous.filter((item) => item.id !== id));
+    } catch (err) {
+      window.alert((err as Error).message);
+    }
+  };
 
   const syncNow = async () => {
     setBusy(true);
@@ -116,6 +154,72 @@ export default function SettingsPage() {
             {archive.engine === 'basic' && (
               <div className="field-hint" style={{ marginTop: 10 }}>
                 安装 Chrome/Chromium 并设置 ARCHIVE_BROWSER_PATH，或安装浏览器后重启，可启用页面级完整存档。
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
+            <h3>API 密钥</h3>
+            <p style={{ marginTop: 0, color: 'var(--muted)' }}>
+              用于浏览器扩展、快捷指令、脚本等第三方客户端。请求时带上
+              <code style={{ margin: '0 4px' }}>Authorization: Bearer &lt;key&gt;</code>
+              或 <code>X-API-Key</code> 头即可。
+            </p>
+
+            <div className="share-row" style={{ maxWidth: 420 }}>
+              <input
+                type="text"
+                value={keyLabel}
+                placeholder="密钥名称，例如 浏览器扩展"
+                onChange={(event) => setKeyLabel(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void createKey();
+                }}
+              />
+              <button className="btn primary" onClick={() => void createKey()}>
+                生成
+              </button>
+            </div>
+
+            {newKey && (
+              <div className="result-box" style={{ marginTop: 10 }}>
+                <div style={{ marginBottom: 6 }}>新密钥（只显示这一次，请立即保存）：</div>
+                <div className="share-row">
+                  <input type="text" readOnly value={newKey} />
+                  <button
+                    className="btn small"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(newKey)
+                        .catch(() => window.prompt('复制密钥', newKey ?? ''));
+                    }}
+                  >
+                    复制
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {apiKeys.length > 0 && (
+              <div className="highlights" style={{ marginTop: 12 }}>
+                {apiKeys.map((item) => (
+                  <div className="highlight-item" key={item.id}>
+                    <div className="highlight-head">
+                      <strong style={{ fontSize: 13.5 }}>{item.label}</strong>
+                      <span className="field-hint" style={{ fontFamily: 'monospace' }}>
+                        {item.prefix}…
+                      </span>
+                      <span className="spacer" />
+                      <button className="icon-btn danger" onClick={() => void revokeKey(item.id)}>
+                        撤销
+                      </button>
+                    </div>
+                    <div className="field-hint">
+                      创建于 {formatDate(item.createdAt)}
+                      {item.lastUsedAt ? ` · 最近使用 ${formatDate(item.lastUsedAt)}` : ' · 尚未使用'}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

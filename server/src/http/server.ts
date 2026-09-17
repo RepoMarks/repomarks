@@ -24,6 +24,7 @@ export function createApp(config: Config, service: DataService, auth: Auth): Exp
     res.setHeader('referrer-policy', 'no-referrer');
     next();
   });
+  auth.setApiKeyChecker((token) => service.authenticateApiKey(token));
   app.use(auth.middleware);
   app.use('/api', createRouter(service, auth));
   app.use(createPublicRouter(service));

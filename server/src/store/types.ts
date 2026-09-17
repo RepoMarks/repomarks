@@ -51,6 +51,15 @@ export interface Collection {
   updatedAt: string;
 }
 
+export interface ApiKeyRecord {
+  id: string;
+  label: string;
+  hash: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string | null;
+}
+
 export interface RepoMeta {
   version: number;
   generator: string;

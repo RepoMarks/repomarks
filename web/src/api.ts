@@ -157,6 +157,17 @@ export const api = {
 
   tags: () => request<TagCount[]>('/tags'),
 
+  listApiKeys: () => request<import('./types').ApiKeyInfo[]>('/apikeys'),
+
+  createApiKey: (label: string) =>
+    request<{ key: string; record: import('./types').ApiKeyInfo }>('/apikeys', {
+      method: 'POST',
+      body: JSON.stringify({ label }),
+    }),
+
+  deleteApiKey: (id: string) =>
+    request<{ ok: boolean }>(`/apikeys/${id}`, { method: 'DELETE' }),
+
   importData: (payload: { html?: string; json?: string; defaultCollectionId?: string | null }) =>
     request<ImportSummary>('/import', { method: 'POST', body: JSON.stringify(payload) }),
 };

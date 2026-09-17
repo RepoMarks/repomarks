@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Config } from '../config.js';
 import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
 import { LinkStore, normalizeTags } from '../store/store.js';
 import type {
+  ApiKeyRecord,
   Collection,
   Highlight,
   ImportSummary,
@@ -72,6 +73,10 @@ function randomSlug(length = 12): string {
   let out = '';
   for (const byte of bytes) out += SLUG_ALPHABET[byte % SLUG_ALPHABET.length];
   return out;
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export class DataService {
@@ -809,6 +814,72 @@ export class DataService {
       await this.repo.commit([...paths], `collection: delete ${shorten(collection.name)}`);
       this.schedulePush();
     });
+  }
+
+  // ---------------------------------------------------------------- API 密钥
+
+  listApiKeys(): Array<Omit<ApiKeyRecord, 'hash'>> {
+    return [...this.store.apiKeys.values()]
+      .map(({ hash: _hash, ...rest }) => rest)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async createApiKey(label: string): Promise<{ key: string; record: Omit<ApiKeyRecord, 'hash'> }> {
+    const name = label?.trim().slice(0, 100) || 'API key';
+    const token = `rm_${randomSlug(32)}`;
+    const record: ApiKeyRecord = {
+      id: ulid(),
+      label: name,
+      hash: hashToken(token),
+      prefix: token.slice(0, 10),
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+    };
+    const { hash: _hash, ...publicRecord } = record;
+    await this.mutex.run(async () => {
+      this.store.apiKeys.set(record.id, record);
+      const changed = await this.store.saveApiKeys();
+      await this.repo.commit(changed, `apikey: create ${name}`);
+      this.schedulePush();
+    });
+    return { key: token, record: publicRecord };
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    await this.mutex.run(async () => {
+      const record = this.store.apiKeys.get(id);
+      if (!record) throw new HttpError(404, '密钥不存在');
+      this.store.apiKeys.delete(id);
+      const changed = await this.store.saveApiKeys();
+      await this.repo.commit(changed, `apikey: revoke ${record.label}`);
+      this.schedulePush();
+    });
+  }
+
+  /** 校验 Bearer / X-API-Key 令牌；lastUsedAt 每天最多持久化一次 */
+  authenticateApiKey(token: string): boolean {
+    if (!token) return false;
+    const hash = hashToken(token);
+    const hashBuffer = Buffer.from(hash, 'utf8');
+    for (const record of this.store.apiKeys.values()) {
+      const stored = Buffer.from(record.hash, 'utf8');
+      if (stored.length !== hashBuffer.length) continue;
+      if (!timingSafeEqual(stored, hashBuffer)) continue;
+      const now = Date.now();
+      const lastUsed = record.lastUsedAt ? Date.parse(record.lastUsedAt) : 0;
+      if (!lastUsed || Number.isNaN(lastUsed) || now - lastUsed > 24 * 60 * 60 * 1000) {
+        record.lastUsedAt = new Date(now).toISOString();
+        void this.mutex
+          .run(async () => {
+            const changed = await this.store.saveApiKeys();
+            await this.repo.commit(changed, `apikey: usage ${record.label}`);
+            this.schedulePush();
+          })
+          .catch(() => undefined);
+      }
+      return true;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- 公开分享

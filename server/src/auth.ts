@@ -33,11 +33,28 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 export class Auth {
   private failures = new Map<string, { count: number; resetAt: number }>();
+  private apiKeyChecker: ((token: string) => boolean) | null = null;
 
   constructor(
     private password: string,
     private secret: string
   ) {}
+
+  setApiKeyChecker(checker: (token: string) => boolean): void {
+    this.apiKeyChecker = checker;
+  }
+
+  private checkApiKey(req: Request): boolean {
+    if (!this.apiKeyChecker) return false;
+    const header = req.headers.authorization;
+    let token = '';
+    if (header && header.toLowerCase().startsWith('bearer ')) {
+      token = header.slice(7).trim();
+    } else {
+      token = String(req.headers['x-api-key'] ?? '').trim();
+    }
+    return token ? this.apiKeyChecker(token) : false;
+  }
 
   get enabled(): boolean {
     return this.password.length > 0;
@@ -120,7 +137,7 @@ export class Auth {
       next();
       return;
     }
-    if (this.isAuthenticated(req)) {
+    if (this.isAuthenticated(req) || this.checkApiKey(req)) {
       next();
       return;
     }

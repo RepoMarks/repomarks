@@ -52,6 +52,14 @@ export interface Collection {
   linkCount?: number;
 }
 
+export interface ApiKeyInfo {
+  id: string;
+  label: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string | null;
+}
+
 export interface TagCount {
   tag: string;
   count: number;

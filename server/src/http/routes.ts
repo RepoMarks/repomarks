@@ -334,6 +334,31 @@ export function createRouter(service: DataService, auth: Auth): Router {
     })
   );
 
+  // ------------------------------------------------------------ API 密钥
+
+  router.get(
+    '/apikeys',
+    wrap((_req, res) => {
+      res.json(service.listApiKeys());
+    })
+  );
+
+  router.post(
+    '/apikeys',
+    wrap(async (req, res) => {
+      const result = await service.createApiKey(str(req.body?.label) ?? '');
+      res.status(201).json(result);
+    })
+  );
+
+  router.delete(
+    '/apikeys/:id',
+    wrap(async (req, res) => {
+      await service.deleteApiKey(req.params.id);
+      res.json({ ok: true });
+    })
+  );
+
   // ------------------------------------------------------------ 导入导出
 
   router.post(
