@@ -87,6 +87,7 @@ export interface RepoStatus {
   behind: number;
   dirty: boolean;
   hasRemoteBranch: boolean;
+  lfs?: boolean;
 }
 
 export interface StatusResponse {

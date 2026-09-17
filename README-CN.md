@@ -169,6 +169,22 @@ npm run smoke      # 冒烟测试：核心同步流程 + HTTP 全链路（用临
 REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/github-e2e.mjs
 ```
 
+## Git LFS
+
+存档截图（PNG）、PDF、上传文件这些二进制内容很容易把仓库撑大。检测到 `git-lfs` 时，RepoMarks 会自动对 `archives/**` 和 `files/**` 启用 LFS（`GIT_LFS=auto`），把规则写入数据仓库的 `.gitattributes`，大文件以 LFS 指针形式进入 Git。
+
+- 宿主机需安装 `git-lfs`；Docker 镜像已内置
+- `GIT_LFS=true` 表示强制要求（未安装则启动失败），`GIT_LFS=false` 关闭 LFS
+- 注意 Git 平台自身的 LFS 配额（GitHub 免费账号每月 1GB 存储 + 1GB 流量）
+- 只有新文件走 LFS；如需转换已有历史，停止服务后执行：
+
+```bash
+node scripts/migrate-to-lfs.mjs ./data          # 本地重写历史
+node scripts/migrate-to-lfs.mjs ./data --push   # 强制推送重写后的历史
+```
+
+> 历史迁移会重写所有涉及这些路径的提交，其他克隆需要重新 clone。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -178,6 +194,7 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `GIT_USERNAME` | `x-access-token` | HTTPS Basic 用户名：GitHub 保持默认，Gitea 填用户名，GitLab 填 `oauth2` |
 | `GIT_BRANCH` | `main` | 分支 |
 | `GIT_SSH_KEY` | - | SSH 私钥路径（仅 SSH 方式） |
+| `GIT_LFS` | `auto` | `auto` 检测到 git-lfs 即启用 / `true` 强制 / `false` 关闭 |
 | `DATA_DIR` | `./data` | 本地 clone 目录（Docker 中为 `/data`） |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | 监听地址 |
 | `AUTH_PASSWORD` | - | 访问密码，留空则不启用登录（不建议） |

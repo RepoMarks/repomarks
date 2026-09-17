@@ -13,7 +13,27 @@ export interface RepoStatus {
   behind: number;
   dirty: boolean;
   hasRemoteBranch: boolean;
+  lfs: boolean;
 }
+
+export type LfsMode = 'auto' | 'true' | 'false';
+
+export interface GitRepoOptions {
+  dir: string;
+  remoteUrl: string;
+  branch: string;
+  authorName: string;
+  authorEmail: string;
+  token?: string;
+  username?: string;
+  sshKeyPath?: string;
+  lfsMode?: LfsMode;
+}
+
+const LFS_ATTRIBUTE_LINES = [
+  'archives/** filter=lfs diff=lfs merge=lfs -text',
+  'files/** filter=lfs diff=lfs merge=lfs -text',
+];
 
 export interface SyncOutcome {
   changed: boolean;
@@ -39,27 +59,29 @@ function isNonFastForward(text: string): boolean {
 
 export class GitRepo {
   private git: Git;
+  private dir: string;
+  private branch: string;
+  private lfsMode: LfsMode;
+  private lfsEnabled = false;
   readonly remoteUrl: string;
 
-  constructor(
-    private dir: string,
-    remoteUrl: string,
-    private branch: string,
-    authorName: string,
-    authorEmail: string,
-    token?: string,
-    username?: string,
-    sshKeyPath?: string
-  ) {
-    this.remoteUrl = stripCredentials(remoteUrl);
+  constructor(options: GitRepoOptions) {
+    this.dir = options.dir;
+    this.branch = options.branch;
+    this.lfsMode = options.lfsMode ?? 'auto';
+    this.remoteUrl = stripCredentials(options.remoteUrl);
     this.git = new Git({
-      cwd: dir,
-      token,
-      username,
-      sshKeyPath,
-      authorName,
-      authorEmail,
+      cwd: options.dir,
+      token: options.token,
+      username: options.username,
+      sshKeyPath: options.sshKeyPath,
+      authorName: options.authorName,
+      authorEmail: options.authorEmail,
     });
+  }
+
+  get lfs(): boolean {
+    return this.lfsEnabled;
   }
 
   get directory(): string {
@@ -91,6 +113,41 @@ export class GitRepo {
       await this.git.run(['reset', '--hard', `origin/${this.branch}`]);
       logger.info(`已从远端拉取 ${this.branch} 分支`);
     }
+
+    const lfsChanged = await this.setupLfs();
+    if (lfsChanged) {
+      await this.commit(['.gitattributes'], 'chore: track archives and files with git lfs');
+    }
+  }
+
+  /** 启用 Git LFS（archives/ 与 files/ 存指针）；返回是否新增了 .gitattributes 规则 */
+  private async setupLfs(): Promise<boolean> {
+    if (this.lfsMode === 'false') return false;
+    const version = await this.git.tryText(['lfs', 'version']);
+    if (!version) {
+      if (this.lfsMode === 'true') {
+        throw new Error('GIT_LFS=true，但未找到 git-lfs（请安装 git-lfs 后重启）');
+      }
+      logger.info('未安装 git-lfs，跳过 LFS（设置 GIT_LFS=true 可强制要求）');
+      return false;
+    }
+    await this.git.run(['lfs', 'install', '--local']);
+
+    const attributePath = path.join(this.dir, '.gitattributes');
+    let existing = '';
+    try {
+      existing = fs.readFileSync(attributePath, 'utf8');
+    } catch {
+      /* 尚无 .gitattributes */
+    }
+    const lines = existing.split('\n').map((line) => line.trim());
+    const missing = LFS_ATTRIBUTE_LINES.filter((line) => !lines.includes(line));
+    this.lfsEnabled = true;
+    if (missing.length === 0) return false;
+    const next = `${existing.trim() ? `${existing.trimEnd()}\n` : ''}${missing.join('\n')}\n`;
+    fs.writeFileSync(attributePath, next, 'utf8');
+    logger.info(`已启用 Git LFS：${missing.length} 条规则写入 .gitattributes`);
+    return true;
   }
 
   private remoteRef(): string {
@@ -178,6 +235,7 @@ export class GitRepo {
       behind,
       dirty,
       hasRemoteBranch: hasRemote,
+      lfs: this.lfsEnabled,
     };
   }
 

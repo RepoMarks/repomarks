@@ -92,6 +92,8 @@ export default function SettingsPage() {
               <dd style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{repo.remoteUrl}</dd>
               <dt>分支</dt>
               <dd>{repo.branch}</dd>
+              <dt>Git LFS</dt>
+              <dd>{repo.lfs ? '已启用（存档与上传文件存 LFS 指针）' : '未启用'}</dd>
               <dt>当前提交</dt>
               <dd style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{repo.head?.slice(0, 12) ?? '（尚无提交）'}</dd>
               <dt>最近提交</dt>

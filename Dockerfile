@@ -13,7 +13,7 @@ RUN npm run build
 
 # ---------- 运行阶段 ----------
 FROM node:24-alpine
-RUN apk add --no-cache git chromium nss freetype harfbuzz ca-certificates ttf-freefont
+RUN apk add --no-cache git git-lfs chromium nss freetype harfbuzz ca-certificates ttf-freefont
 
 ENV NODE_ENV=production \
     DATA_DIR=/data \

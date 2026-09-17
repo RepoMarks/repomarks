@@ -171,6 +171,22 @@ An end-to-end test against a real GitHub repository is also available (it writes
 REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/github-e2e.mjs
 ```
 
+## Git LFS
+
+Binary files dominate repository size: screenshots (PNG) and PDFs, and even gzipped HTML archives. When `git-lfs` is available RepoMarks enables LFS for `archives/**` and `files/**` automatically (`GIT_LFS=auto`), writes the rules into the data repository's `.gitattributes`, and keeps large files out of the regular Git object store.
+
+- Install `git-lfs` on the host; the Docker image already includes it
+- `GIT_LFS=true` fails fast when git-lfs is missing, `GIT_LFS=false` disables LFS entirely
+- The usual quota rules of your Git host apply (GitHub free accounts include 1 GB LFS storage + 1 GB bandwidth per month)
+- Only newly added files go through LFS. To convert existing history, stop the service and run:
+
+```bash
+node scripts/migrate-to-lfs.mjs ./data          # rewrite history locally
+node scripts/migrate-to-lfs.mjs ./data --push   # force-push the rewritten history
+```
+
+> History migration rewrites every commit that touched those paths, so existing clones must be re-cloned.
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -180,6 +196,7 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `GIT_USERNAME` | `x-access-token` | HTTPS username: keep the default for GitHub, use your username for Gitea, `oauth2` for GitLab |
 | `GIT_BRANCH` | `main` | Branch |
 | `GIT_SSH_KEY` | - | Path to the SSH private key (SSH only) |
+| `GIT_LFS` | `auto` | `auto` (enable when git-lfs is installed) / `true` (require it) / `false` |
 | `DATA_DIR` | `./data` | Local clone directory (`/data` in Docker) |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Listen address |
 | `AUTH_PASSWORD` | - | Login password; leaving it empty disables authentication (not recommended) |

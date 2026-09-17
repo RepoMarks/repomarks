@@ -26,6 +26,7 @@ function bool(name: string, fallback: boolean): boolean {
 
 export type ArchiveEngine = 'auto' | 'singlefile' | 'basic' | 'off';
 export type ArchiveFormat = 'html' | 'readable' | 'screenshot' | 'pdf' | 'wayback';
+export type LfsMode = 'auto' | 'true' | 'false';
 
 const ARCHIVE_FORMAT_VALUES: ArchiveFormat[] = ['html', 'readable', 'screenshot', 'pdf', 'wayback'];
 
@@ -35,6 +36,7 @@ export interface Config {
   gitUsername: string;
   gitBranch: string;
   gitSshKey: string;
+  gitLfs: LfsMode;
   dataDir: string;
   port: number;
   host: string;
@@ -79,6 +81,10 @@ export function loadConfig(): Config {
     gitUsername: str('GIT_USERNAME', 'x-access-token'),
     gitBranch: str('GIT_BRANCH', 'main'),
     gitSshKey: str('GIT_SSH_KEY'),
+    gitLfs: (() => {
+      const value = str('GIT_LFS', 'auto').toLowerCase();
+      return value === 'true' || value === 'false' ? (value as LfsMode) : 'auto';
+    })(),
     dataDir,
     port: num('PORT', 3000),
     host: str('HOST', '0.0.0.0'),

@@ -57,6 +57,36 @@ async function main(): Promise<void> {
     ? `ok (errors: ${JSON.stringify(archived.formatErrors)})`
     : 'all ok');
 
+  let hasGitLfs = true;
+  try {
+    execFileSync('git', ['lfs', 'version'], { stdio: 'ignore' });
+  } catch {
+    hasGitLfs = false;
+  }
+  if (hasGitLfs && archived.readablePath) {
+    let pointer = '';
+    for (let attempt = 0; attempt < 40; attempt++) {
+      try {
+        pointer = execFileSync(
+          'git',
+          ['-C', config.dataDir, 'cat-file', '-p', `HEAD:${archived.readablePath}`],
+          { encoding: 'utf8' }
+        );
+        break;
+      } catch {
+        await sleep(250);
+      }
+    }
+    if (!pointer.startsWith('version https://git-lfs.github.com/spec/v1')) {
+      throw new Error(`LFS 指针缺失: ${pointer.slice(0, 40) || '(提交尚未完成)'}`);
+    }
+    const onDisk = fs.readFileSync(path.join(config.dataDir, archived.readablePath));
+    if (!(onDisk[0] === 0x1f && onDisk[1] === 0x8b)) {
+      throw new Error('LFS 未还原真实文件内容（工作区里还是指针）');
+    }
+    console.log('git lfs pointer ok');
+  }
+
   const search = a.search({ q: '测试' });
   console.log('search hits:', search.total);
   if (search.total !== 1) throw new Error('搜索失败');
@@ -104,8 +134,8 @@ async function main(): Promise<void> {
   execFileSync('git', ['init', '--bare', '-b', 'main', raceRemote], { stdio: 'ignore' });
   const dirA = path.join(base, 'race-a');
   const dirB = path.join(base, 'race-b');
-  const repoA = new GitRepo(dirA, raceRemote, 'main', 'test', 'test@local');
-  const repoB = new GitRepo(dirB, raceRemote, 'main', 'test', 'test@local');
+  const repoA = new GitRepo({ dir: dirA, remoteUrl: raceRemote, branch: 'main', authorName: 'test', authorEmail: 'test@local' });
+  const repoB = new GitRepo({ dir: dirB, remoteUrl: raceRemote, branch: 'main', authorName: 'test', authorEmail: 'test@local' });
   await repoA.init();
   await repoB.init();
   fs.mkdirSync(path.join(dirA, 'links'), { recursive: true });
@@ -122,7 +152,7 @@ async function main(): Promise<void> {
   if (!merged.includes('aaa') || !merged.includes('bbb')) {
     throw new Error(`无关历史合并失败: ${merged}`);
   }
-  const repoAReload = new GitRepo(dirA, raceRemote, 'main', 'test', 'test@local');
+  const repoAReload = new GitRepo({ dir: dirA, remoteUrl: raceRemote, branch: 'main', authorName: 'test', authorEmail: 'test@local' });
   await repoAReload.init();
   await repoAReload.sync();
   const aFiles = fs.readdirSync(path.join(dirA, 'links'));
@@ -135,7 +165,7 @@ async function main(): Promise<void> {
   const newRemote = path.join(base, 'migrated.git');
   fs.mkdirSync(newRemote, { recursive: true });
   execFileSync('git', ['init', '--bare', '-b', 'main', newRemote], { stdio: 'ignore' });
-  const repoMigrated = new GitRepo(dirA, newRemote, 'main', 'test', 'test@local');
+  const repoMigrated = new GitRepo({ dir: dirA, remoteUrl: newRemote, branch: 'main', authorName: 'test', authorEmail: 'test@local' });
   await repoMigrated.init();
   await repoMigrated.sync();
   const migratedLog = execFileSync('git', ['--git-dir', newRemote, 'log', '--oneline'], {

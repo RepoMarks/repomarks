@@ -98,16 +98,17 @@ export class DataService {
 
   constructor(private config: Config) {
     this.store = new LinkStore(config.dataDir, config.shardSize);
-    this.repo = new GitRepo(
-      config.dataDir,
-      config.repoUrl,
-      config.gitBranch,
-      config.authorName,
-      config.authorEmail,
-      config.gitToken,
-      config.gitUsername,
-      config.gitSshKey
-    );
+    this.repo = new GitRepo({
+      dir: config.dataDir,
+      remoteUrl: config.repoUrl,
+      branch: config.gitBranch,
+      authorName: config.authorName,
+      authorEmail: config.authorEmail,
+      token: config.gitToken,
+      username: config.gitUsername,
+      sshKeyPath: config.gitSshKey,
+      lfsMode: config.gitLfs,
+    });
   }
 
   async init(): Promise<void> {
