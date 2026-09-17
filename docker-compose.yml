@@ -1,0 +1,15 @@
+services:
+  gitmarks:
+    build: .
+    image: gitmarks:latest
+    container_name: gitmarks
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      ARCHIVE_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
+    volumes:
+      - ./data:/data

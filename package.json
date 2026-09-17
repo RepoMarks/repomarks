@@ -1,0 +1,24 @@
+{
+  "name": "gitmarks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted bookmark manager that stores everything in a single git repository",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "smoke": "npm run smoke -w server && npm run smoke:http",
+    "smoke:http": "node scripts/http-smoke.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
