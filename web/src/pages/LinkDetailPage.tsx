@@ -89,38 +89,35 @@ export default function LinkDetailPage() {
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightTarget, readable]);
 
-  if (error) {
-    return (
-      <>
-        <div className="topbar">
-          <button className="icon-btn menu-btn" onClick={openMenu}>
-            ☰
-          </button>
-          <button className="btn" onClick={() => navigate(-1)}>
-            返回
-          </button>
-        </div>
-        <div className="content">
-          <div className="page-error">{error}</div>
-        </div>
-      </>
-    );
-  }
-
-  if (!link) {
-    return <div className="loading-page">加载中…</div>;
-  }
-
-  const collection = collections.find((item) => item.id === link.collectionId);
-  const icon = faviconSrc(link);
-
-  const formats: Array<{ key: ViewerFormat; label: string; available: boolean; size?: number | null }> = [
-    { key: 'html', label: '网页存档', available: Boolean(link.archivePath), size: link.archiveSize },
-    { key: 'readable', label: '阅读版', available: Boolean(link.readablePath), size: link.readableSize },
-    { key: 'screenshot', label: '截图', available: Boolean(link.screenshotPath), size: link.screenshotSize },
-    { key: 'pdf', label: 'PDF', available: Boolean(link.pdfPath), size: link.pdfSize },
-    { key: 'wayback', label: 'Wayback', available: Boolean(link.waybackUrl) },
-  ];
+  const formats: Array<{
+    key: ViewerFormat;
+    label: string;
+    available: boolean;
+    size?: number | null;
+  }> = link
+    ? [
+        {
+          key: 'html',
+          label: '网页存档',
+          available: Boolean(link.archivePath),
+          size: link.archiveSize,
+        },
+        {
+          key: 'readable',
+          label: '阅读版',
+          available: Boolean(link.readablePath),
+          size: link.readableSize,
+        },
+        {
+          key: 'screenshot',
+          label: '截图',
+          available: Boolean(link.screenshotPath),
+          size: link.screenshotSize,
+        },
+        { key: 'pdf', label: 'PDF', available: Boolean(link.pdfPath), size: link.pdfSize },
+        { key: 'wayback', label: 'Wayback', available: Boolean(link.waybackUrl) },
+      ]
+    : [];
   const availableFormats = formats.filter((item) => item.available);
   const activeFormat: ViewerFormat | null =
     format && availableFormats.some((item) => item.key === format)
@@ -131,7 +128,7 @@ export default function LinkDetailPage() {
     ? readerLines.findIndex((line) => line.includes(highlightTarget.slice(0, 80)))
     : -1;
   const lineHasHighlight = (line: string): boolean =>
-    (link.highlights ?? []).some((item) => line.includes(item.text.slice(0, 30)));
+    (link?.highlights ?? []).some((item) => line.includes(item.text.slice(0, 30)));
 
   useEffect(() => {
     if (activeFormat !== 'readable' || !link?.readablePath) return;
@@ -156,6 +153,31 @@ export default function LinkDetailPage() {
       alive = false;
     };
   }, [activeFormat, link?.id, link?.readablePath]);
+
+  if (error) {
+    return (
+      <>
+        <div className="topbar">
+          <button className="icon-btn menu-btn" onClick={openMenu}>
+            ☰
+          </button>
+          <button className="btn" onClick={() => navigate(-1)}>
+            返回
+          </button>
+        </div>
+        <div className="content">
+          <div className="page-error">{error}</div>
+        </div>
+      </>
+    );
+  }
+
+  if (!link) {
+    return <div className="loading-page">加载中…</div>;
+  }
+
+  const collection = collections.find((item) => item.id === link.collectionId);
+  const icon = faviconSrc(link);
 
   return (
     <>
