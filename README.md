@@ -45,9 +45,7 @@ archives/<id>.html.gz  网页存档（gzip 压缩的单文件 HTML）
 ### 1. 准备数据仓库
 
 1. 在 GitHub / Gitea / GitLab 新建一个**私有仓库**（可以是空仓库），例如 `link-data`
-2. 创建访问令牌：
-   - **GitHub**：Settings → Developer settings → Fine-grained tokens，只勾选该仓库的 `Contents: Read and write`
-   - **Gitea**：设置 → 应用 → 生成令牌，权限选 `repository: Read and write`
+2. 按 [获取访问令牌](#获取访问令牌) 创建最小权限的令牌
 3. 记下仓库地址，例如 `https://github.com/yourname/link-data.git`
 
 ### 2. 配置并启动
@@ -72,6 +70,56 @@ docker compose up -d --build
 
 镜像基于 Alpine，自带 `git` 和 `chromium`，网页存档默认就是完整存档模式，数据目录挂载在 `./data`。
 
+## 获取访问令牌
+
+服务通过 HTTPS + 令牌读写数据仓库。令牌只保存在 `.env`（已被 .gitignore 排除），不会写进 `.git/config`、浏览器或数据仓库。
+
+### GitHub（推荐 Fine-grained token）
+
+1. 打开 https://github.com/settings/personal-access-tokens/new
+   （或：头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token）
+2. **Token name** 随意，例如 `repomarks`
+3. **Expiration** 选 90 天或自定义；到期后重新生成并在 `.env` 里替换即可
+4. **Repository access** 选 `Only select repositories`，只勾选你的数据仓库
+5. **Permissions → Repository permissions → Contents** 设为 `Read and write`
+   （`Metadata` 会自动变成只读，其它权限全部保持 `No access`）
+6. 点 **Generate token**，复制 `github_pat_...`（只显示这一次）→ 填到 `.env` 的 `GIT_TOKEN`
+7. `GIT_USERNAME` 保持默认的 `x-access-token`
+
+> 也可以使用 Classic token（https://github.com/settings/tokens/new，勾选 `repo` 范围），但权限覆盖你名下所有仓库，安全性不如细粒度令牌。
+
+### Gitea
+
+1. 右上角头像 → 设置 → 应用 → 管理 Access Tokens
+   （或直接访问 `https://你的gitea域名/user/settings/applications`）
+2. 名称随意，权限只勾选 `repository` 的 **Read and Write**
+3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
+4. `GIT_USERNAME` 填你的 Gitea 用户名
+
+### GitLab
+
+1. 头像 → Edit profile → Access tokens
+   （或 https://gitlab.com/-/user_settings/personal_access_tokens）
+2. 勾选 **`write_repository`** 范围（自动包含 `read_repository`）并设置有效期
+3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
+4. `GIT_USERNAME=oauth2`
+
+### SSH 方式（不想用令牌）
+
+生成或复用已有密钥后，在 `.env` 里配置：
+
+```ini
+REPO_URL=git@github.com:you/link-data.git
+GIT_SSH_KEY=/path/to/id_ed25519    # Docker 部署需把密钥挂载进容器
+GIT_TOKEN=                          # 留空
+```
+
+### 安全建议
+
+- 令牌只授予这一个数据仓库的最小权限，不要用账号全量权限的令牌
+- 怀疑泄露时，在平台撤销旧令牌并生成新的，更新 `.env` 后重启服务即可
+- 数据仓库建议设为私有；服务本身不要直接暴露公网，需要时放在反向代理后面
+
 ## 开发
 
 ```bash
@@ -95,7 +143,7 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | --- | --- | --- |
 | `REPO_URL` | 必填 | 数据仓库地址（https 或 ssh） |
 | `GIT_TOKEN` | - | HTTPS 访问令牌；SSH 方式可留空 |
-| `GIT_USERNAME` | `x-access-token` | HTTPS Basic 用户名，Gitea 用你的用户名 |
+| `GIT_USERNAME` | `x-access-token` | HTTPS Basic 用户名：GitHub 保持默认，Gitea 填用户名，GitLab 填 `oauth2` |
 | `GIT_BRANCH` | `main` | 分支 |
 | `GIT_SSH_KEY` | - | SSH 私钥路径（仅 SSH 方式） |
 | `DATA_DIR` | `./data` | 本地 clone 目录（Docker 中为 `/data`） |
