@@ -207,7 +207,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
         const response = await fetch(url, {
           redirect: 'follow',
           signal: AbortSignal.timeout(8000),
-          headers: { 'user-agent': 'Mozilla/5.0 (compatible; Gitmarks/0.1)', accept: 'image/*' },
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; RepoMarks/0.1)', accept: 'image/*' },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const type = (response.headers.get('content-type') ?? '').split(';')[0];
@@ -294,7 +294,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
   router.get(
     '/export',
     wrap(async (_req, res) => {
-      res.setHeader('content-disposition', 'attachment; filename="gitmarks-export.json"');
+      res.setHeader('content-disposition', 'attachment; filename="repomarks-export.json"');
       res.json(await service.exportData());
     })
   );

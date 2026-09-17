@@ -14,7 +14,7 @@ async function main(): Promise<void> {
 
   const app = createApp(config, service, auth);
   const server = app.listen(config.port, config.host, () => {
-    logger.info(`Gitmarks 已启动: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
+    logger.info(`RepoMarks 已启动: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
     logger.info(`数据仓库: ${service.repo.remoteUrl} (本地目录 ${config.dataDir})`);
     const stats = service.store.stats();
     logger.info(`当前数据: ${stats.links} 条链接 / ${stats.collections} 个收藏夹 / ${stats.archived} 个存档`);

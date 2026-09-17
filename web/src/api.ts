@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-const UNAUTHORIZED_EVENT = 'gitmarks:unauthorized';
+const UNAUTHORIZED_EVENT = 'repomarks:unauthorized';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;

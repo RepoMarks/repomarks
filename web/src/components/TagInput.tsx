@@ -34,7 +34,7 @@ export default function TagInput({ value, onChange, suggestions = [] }: TagInput
       ))}
       <input
         value={input}
-        list="gitmarks-tag-suggestions"
+        list="repomarks-tag-suggestions"
         placeholder={value.length === 0 ? '输入标签，回车添加' : ''}
         onChange={(event) => {
           const raw = event.target.value;
@@ -51,7 +51,7 @@ export default function TagInput({ value, onChange, suggestions = [] }: TagInput
         }}
         onBlur={() => add(input)}
       />
-      <datalist id="gitmarks-tag-suggestions">
+      <datalist id="repomarks-tag-suggestions">
         {suggestions.map((tag) => (
           <option key={tag} value={tag} />
         ))}

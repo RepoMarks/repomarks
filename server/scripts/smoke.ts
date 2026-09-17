@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import { loadConfig } from '../src/config.js';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main(): Promise<void> {
-  const base = path.join(os.tmpdir(), `gitmarks-smoke-${Date.now()}`);
+  const base = path.join(os.tmpdir(), `repomarks-smoke-${Date.now()}`);
   const remote = path.join(base, 'remote.git');
   fs.mkdirSync(remote, { recursive: true });
   execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' });

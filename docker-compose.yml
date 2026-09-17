@@ -1,8 +1,8 @@
 services:
-  gitmarks:
+  repomarks:
     build: .
-    image: gitmarks:latest
-    container_name: gitmarks
+    image: repomarks:latest
+    container_name: repomarks
     restart: unless-stopped
     ports:
       - "3000:3000"

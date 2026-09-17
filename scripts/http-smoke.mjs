@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'gitmarks-http-'));
+const base = fs.mkdtempSync(path.join(os.tmpdir(), 'repomarks-http-'));
 const remote = path.join(base, 'remote.git');
 execFileSync('git', ['init', '--bare', '-b', 'main', remote]);
 
@@ -141,7 +141,7 @@ try {
   });
   const archiveHtml = await archivePage.text();
   if (archivePage.status !== 200) fail(`archive http ${archivePage.status}`);
-  if (!archiveHtml.includes('gitmarks-archive') && archived.archiveEngine !== 'singlefile') {
+  if (!archiveHtml.includes('repomarks-archive') && archived.archiveEngine !== 'singlefile') {
     fail('archive marker missing');
   }
   console.log('9. archive served ok');
@@ -178,7 +178,7 @@ try {
 
   const index = await fetch(`${baseUrl}/`);
   const indexHtml = await index.text();
-  if (!indexHtml.includes('Gitmarks')) fail('frontend not served');
+  if (!indexHtml.includes('RepoMarks')) fail('frontend not served');
   const spa = await fetch(`${baseUrl}/settings`);
   const spaHtml = await spa.text();
   if (!spaHtml.includes('id="root"')) fail('SPA fallback broken');

@@ -1,5 +1,5 @@
 {
-  "name": "gitmarks",
+  "name": "repomarks",
   "version": "0.1.0",
   "private": true,
   "description": "Self-hosted bookmark manager that stores everything in a single git repository",

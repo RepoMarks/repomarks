@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { fetchHtml } from './metadata.js';
 
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Gitmarks/0.1';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 RepoMarks/0.1';
 
 const MAX_CSS_BYTES = 1_500_000;
 const MAX_IMAGE_BYTES = 2_000_000;
@@ -52,8 +52,8 @@ export async function captureBasicArchive(url: string, timeoutMs: number): Promi
   $(
     'link[rel="preload"], link[rel="prefetch"], link[rel="modulepreload"], link[rel="dns-prefetch"], link[rel="preconnect"], link[rel="preconnect"]'
   ).remove();
-  if (!$('meta[name="gitmarks-archive"]').length) {
-    $('head').prepend(`<meta name="gitmarks-archive" content="basic">`);
+  if (!$('meta[name="repomarks-archive"]').length) {
+    $('head').prepend(`<meta name="repomarks-archive" content="basic">`);
   }
   if (!$('meta[charset]').length && !$('meta[http-equiv="Content-Type"]').length) {
     $('head').prepend('<meta charset="utf-8">');
@@ -159,6 +159,6 @@ export async function captureBasicArchive(url: string, timeoutMs: number): Promi
     }
   });
 
-  const header = `<!-- Gitmarks lightweight archive of ${finalUrl} at ${new Date().toISOString()} -->\n`;
+  const header = `<!-- RepoMarks lightweight archive of ${finalUrl} at ${new Date().toISOString()} -->\n`;
   return `${header}<!DOCTYPE html>\n${$.html()}`;
 }

@@ -1,4 +1,4 @@
-﻿import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,7 +19,7 @@ if (!owner || !repoName) {
 }
 
 const stamp = Date.now();
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'gitmarks-gh-'));
+const base = fs.mkdtempSync(path.join(os.tmpdir(), 'repomarks-gh-'));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const fail = (msg) => {
   throw new Error(`ASSERT FAILED: ${msg}`);
@@ -117,7 +117,7 @@ try {
     `1. server A up, repo=${owner}/${repoName}, existing links=${initialCount}, commits=${commitsBefore}`
   );
 
-  const urlA = `https://example.org/?gitmarks-e2e=${stamp}`;
+  const urlA = `https://example.org/?repomarks-e2e=${stamp}`;
   const created = await clientA.req('/api/links', {
     method: 'POST',
     body: JSON.stringify({ url: urlA, tags: ['github-test'] }),
@@ -143,7 +143,7 @@ try {
     `3. archive ok (engine=${archived.archiveEngine}, ${Math.round(archived.archiveSize / 1024)} KB)`
   );
 
-  const urlImport = `https://nodejs.org/?gitmarks-e2e=${stamp}`;
+  const urlImport = `https://nodejs.org/?repomarks-e2e=${stamp}`;
   const importPayload = {
     json: JSON.stringify([
       { url: urlImport, title: 'Node.js test', folder: '技术/运行时', tags: ['dev'] },
@@ -180,7 +180,7 @@ try {
   if (!archiveInB.data.archivePath) fail('B missing archivePath');
   console.log(`6. second instance pulled from GitHub ok (links=${listB.data.total}, archive synced)`);
 
-  const urlB = `https://www.rust-lang.org/?gitmarks-e2e=${stamp}`;
+  const urlB = `https://www.rust-lang.org/?repomarks-e2e=${stamp}`;
   const addedB = await clientB.req('/api/links', {
     method: 'POST',
     body: JSON.stringify({ url: urlB, tags: ['from-b'] }),

@@ -52,7 +52,7 @@ export class LinkStore {
     if (!fs.existsSync(this.abs(META_FILE))) {
       const meta: RepoMeta = {
         version: 1,
-        generator: 'gitmarks',
+        generator: 'repomarks',
         createdAt: new Date().toISOString(),
       };
       await this.atomicWrite(META_FILE, JSON.stringify(meta, null, 2) + '\n');

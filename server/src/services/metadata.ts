@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { HttpError } from '../util/misc.js';
 
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Gitmarks/0.1';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 RepoMarks/0.1';
 
 export interface FetchedMetadata {
   title?: string;

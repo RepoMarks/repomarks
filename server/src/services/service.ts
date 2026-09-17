@@ -611,7 +611,7 @@ export class DataService {
     links: LinkRecord[];
   }> {
     return {
-      generator: 'gitmarks',
+      generator: 'repomarks',
       exportedAt: new Date().toISOString(),
       collections: [...this.store.collections.values()],
       links: [...this.store.links.values()],

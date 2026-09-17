@@ -53,13 +53,13 @@ export function loadConfig(): Config {
   const repoUrl = str('REPO_URL');
   if (!repoUrl) {
     console.error(
-      '\n[gitmarks] 缺少 REPO_URL。请复制 .env.example 为 .env 并填写数据仓库地址。\n'
+      '\n[repomarks] 缺少 REPO_URL。请复制 .env.example 为 .env 并填写数据仓库地址。\n'
     );
     process.exit(1);
   }
   const authPassword = str('AUTH_PASSWORD');
   if (!authPassword) {
-    console.warn('[gitmarks] 警告: 未设置 AUTH_PASSWORD，服务将不启用登录保护。');
+    console.warn('[repomarks] 警告: 未设置 AUTH_PASSWORD，服务将不启用登录保护。');
   }
   const dataDir = path.resolve(rootDir, str('DATA_DIR', './data'));
   fs.mkdirSync(path.dirname(dataDir), { recursive: true });
@@ -76,7 +76,7 @@ export function loadConfig(): Config {
     authPassword,
     sessionSecret:
       str('SESSION_SECRET') ||
-      crypto.createHash('sha256').update(`gitmarks:${authPassword}:${repoUrl}`).digest('hex'),
+      crypto.createHash('sha256').update(`repomarks:${authPassword}:${repoUrl}`).digest('hex'),
     shardSize: Math.max(100, num('SHARD_SIZE', 1000)),
     syncIntervalMs: Math.max(0, num('SYNC_INTERVAL', 60)) * 1000,
     fetchTimeoutMs: num('FETCH_TIMEOUT', 15000),
@@ -88,7 +88,7 @@ export function loadConfig(): Config {
       .filter(Boolean),
     archiveTimeoutMs: num('ARCHIVE_TIMEOUT', 90000),
     allowPrivateUrls: bool('ALLOW_PRIVATE_URLS', false),
-    authorName: str('GIT_AUTHOR_NAME', 'Gitmarks'),
-    authorEmail: str('GIT_AUTHOR_EMAIL', 'gitmarks@localhost'),
+    authorName: str('GIT_AUTHOR_NAME', 'RepoMarks'),
+    authorEmail: str('GIT_AUTHOR_EMAIL', 'repomarks@localhost'),
   };
 }

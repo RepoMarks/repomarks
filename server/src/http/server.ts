@@ -43,7 +43,7 @@ export function createApp(config: Config, service: DataService, auth: Auth): Exp
     app.get('/', (_req, res) => {
       res
         .status(200)
-        .send('Gitmarks API 正在运行。前端尚未构建，请在项目根目录执行 npm run build 后重启。');
+        .send('RepoMarks API 正在运行。前端尚未构建，请在项目根目录执行 npm run build 后重启。');
     });
   }
 

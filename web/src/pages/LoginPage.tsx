@@ -26,7 +26,7 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
         <div className="brand">
           <div className="brand-mark">G</div>
           <div>
-            <div className="brand-name">Gitmarks</div>
+            <div className="brand-name">RepoMarks</div>
             <div className="brand-sub">数据存于 Git 仓库</div>
           </div>
         </div>

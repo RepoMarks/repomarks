@@ -1,4 +1,4 @@
-# Gitmarks
+# RepoMarks
 
 自部署的链接管理器（类似 [Linkwarden](https://github.com/linkwarden/linkwarden)），但**所有数据都存放在你自己的 Git 仓库里**（GitHub / Gitea / GitLab 均可），不需要数据库，也不依赖任何托管服务。
 
@@ -19,7 +19,7 @@
 ## 工作原理
 
 ```
-浏览器 ──HTTP──> Gitmarks 服务 ──git pull/push──> 数据仓库 (GitHub/Gitea/...)
+浏览器 ──HTTP──> RepoMarks 服务 ──git pull/push──> 数据仓库 (GitHub/Gitea/...)
                      │
                      ├── 本地 clone (DATA_DIR)
                      ├── 内存索引（搜索/标签/收藏夹）
@@ -110,7 +110,7 @@ REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/gi
 | `ARCHIVE_BROWSER_ARGS` | - | 浏览器启动参数，逗号分隔（Docker 中为 `--no-sandbox,--disable-dev-shm-usage`） |
 | `ARCHIVE_TIMEOUT` | `90000` | 单次存档超时（毫秒） |
 | `ALLOW_PRIVATE_URLS` | `false` | 是否允许抓取内网地址（默认禁止，防 SSRF） |
-| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `Gitmarks` / `gitmarks@localhost` | 提交作者信息 |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | 提交作者信息 |
 
 ## API
 

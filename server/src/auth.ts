@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 
-const COOKIE_NAME = 'gitmarks_session';
+const COOKIE_NAME = 'repomarks_session';
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function digest(value: string): Buffer {
