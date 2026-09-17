@@ -121,6 +121,20 @@ export function createRouter(service: DataService, auth: Auth): Router {
     })
   );
 
+  router.post(
+    '/links/bulk',
+    wrap(async (req, res) => {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+      res.json(
+        await service.bulkUpdate(ids, requireString(req.body?.action, 'action'), {
+          tags: Array.isArray(req.body?.tags) ? req.body.tags.map(String) : undefined,
+          collectionId:
+            req.body?.collectionId === undefined ? undefined : req.body.collectionId,
+        })
+      );
+    })
+  );
+
   router.get(
     '/links/:id',
     wrap((req, res) => {

@@ -221,6 +221,21 @@ try {
   if (badUrl.res.status !== 400) fail('private url should be rejected');
   console.log('16. SSRF guard ok');
 
+  const bulk = await req('/api/links/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [link.id], action: 'pin' }),
+  });
+  if (bulk.data.updated !== 1) fail(`bulk pin failed: ${bulk.text}`);
+  const afterBulkTags = await req('/api/links/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [link.id], action: 'addTags', tags: ['bulk-test'] }),
+  });
+  if (!afterBulkTags.data.updated) fail('bulk addTags failed');
+  const pinned = await req(`/api/links/${link.id}`);
+  if (!pinned.data.pinned) fail('pin not applied');
+  if (!pinned.data.tags.includes('bulk-test')) fail('bulk tags not applied');
+  console.log('16b. bulk actions ok');
+
   const logout = await req('/api/auth/logout', { method: 'POST' });
   if (logout.res.status !== 200) fail('logout failed');
   cookie = '';

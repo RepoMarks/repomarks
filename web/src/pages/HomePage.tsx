@@ -6,6 +6,7 @@ import { useCollections, useTags } from '../hooks';
 import LinkCard from '../components/LinkCard';
 import LinkFormDialog from '../components/LinkFormDialog';
 import Pager from '../components/Pager';
+import { collectionOptions } from '../components/CollectionSelect';
 import type { SearchResult } from '../types';
 
 const SORT_OPTIONS = [
@@ -41,6 +42,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const requestId = useRef(0);
 
   const load = useCallback(() => {
@@ -107,6 +110,48 @@ export default function HomePage() {
   const hasFilter = Boolean(q || collectionId || tag || archived);
   const activeCollection = collections.find((item) => item.id === collectionId);
 
+  const toggleSelect = (id: string) => {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+
+  const runBulk = async (
+    action: string,
+    payload: { tags?: string[]; collectionId?: string | null } = {}
+  ) => {
+    if (selected.size === 0) return;
+    if (action === 'delete' && !window.confirm(`确定删除选中的 ${selected.size} 条链接吗？`)) {
+      return;
+    }
+    try {
+      await api.bulkUpdate([...selected], action, payload);
+      exitSelectMode();
+      notifyChange();
+      load();
+    } catch (err) {
+      window.alert((err as Error).message);
+    }
+  };
+
+  const promptTags = (action: 'addTags' | 'removeTags') => {
+    const input = window.prompt(action === 'addTags' ? '要添加的标签（逗号分隔）' : '要移除的标签（逗号分隔）');
+    if (!input) return;
+    const tags = input
+      .split(/[,，]/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    if (tags.length > 0) void runBulk(action, { tags });
+  };
+
   return (
     <>
       <div className="topbar">
@@ -147,12 +192,94 @@ export default function HomePage() {
         >
           {view === 'grid' ? '列表视图' : '网格视图'}
         </button>
+        <button
+          className="btn ghost"
+          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+        >
+          {selectMode ? '退出选择' : '选择'}
+        </button>
         <button className="btn primary" onClick={() => setShowAdd(true)}>
           添加链接
         </button>
       </div>
 
       <div className="content">
+        {selectMode && (
+          <div className="bulk-bar">
+            <span className="bulk-count">已选 {selected.size} 条</span>
+            <button
+              className="btn small"
+              onClick={() =>
+                setSelected(new Set((data?.items ?? []).map((item) => item.id)))
+              }
+            >
+              全选本页
+            </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => promptTags('addTags')}
+            >
+              添加标签
+            </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => promptTags('removeTags')}
+            >
+              移除标签
+            </button>
+            <select
+              className="bulk-select"
+              value=""
+              disabled={selected.size === 0}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (!value) return;
+                void runBulk('setCollection', {
+                  collectionId: value === '__none__' ? null : value,
+                });
+              }}
+            >
+              <option value="">移动到收藏夹…</option>
+              <option value="__none__">未分类</option>
+              {collectionOptions(collections).map(({ collection, depth }) => (
+                <option key={collection.id} value={collection.id}>
+                  {'　'.repeat(depth)}
+                  {collection.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('pin')}
+            >
+              置顶
+            </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('unpin')}
+            >
+              取消置顶
+            </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('archive')}
+            >
+              抓取存档
+            </button>
+            <button
+              className="btn small danger"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('delete')}
+            >
+              删除
+            </button>
+          </div>
+        )}
         {hasFilter && (
           <div className="field-hint" style={{ marginBottom: 12 }}>
             当前筛选：
@@ -195,6 +322,9 @@ export default function HomePage() {
                 key={link.id}
                 link={link}
                 collections={collections}
+                selectable={selectMode}
+                selected={selected.has(link.id)}
+                onSelectToggle={toggleSelect}
                 onChanged={() => {
                   load();
                   notifyChange();

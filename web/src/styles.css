@@ -585,6 +585,54 @@ textarea {
 
 /* ---------------------------------------------------------------- 状态与分页 */
 
+.bulk-bar {
+  position: sticky;
+  top: 62px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+
+.bulk-count {
+  font-size: 13px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.bulk-select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  max-width: 200px;
+}
+
+.card-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  padding: 3px 5px;
+  background: rgba(15, 17, 21, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .empty {
   border: 1px dashed var(--border);
   border-radius: var(--radius);

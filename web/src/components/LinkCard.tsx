@@ -7,6 +7,9 @@ interface LinkCardProps {
   link: LinkRecord;
   collections: Collection[];
   onChanged: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectToggle?: (id: string) => void;
 }
 
 function ArchiveBadge({ link }: { link: LinkRecord }) {
@@ -34,7 +37,14 @@ function ArchiveBadge({ link }: { link: LinkRecord }) {
   return null;
 }
 
-export default function LinkCard({ link, collections, onChanged }: LinkCardProps) {
+export default function LinkCard({
+  link,
+  collections,
+  onChanged,
+  selectable = false,
+  selected = false,
+  onSelectToggle,
+}: LinkCardProps) {
   const [busy, setBusy] = useState(false);
   const collection = collections.find((item) => item.id === link.collectionId);
   const icon = faviconSrc(link);
@@ -65,7 +75,16 @@ export default function LinkCard({ link, collections, onChanged }: LinkCardProps
   };
 
   return (
-    <article className="card">
+    <article className={`card ${selected ? 'selected' : ''}`}>
+      {selectable && (
+        <label className="card-check" title="选择">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onSelectToggle?.(link.id)}
+          />
+        </label>
+      )}
       <Link className="card-link" to={`/links/${link.id}`}>
         {link.previewImage && (
           <div className="card-image">

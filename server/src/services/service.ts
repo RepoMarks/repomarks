@@ -312,6 +312,93 @@ export class DataService {
     });
   }
 
+  // ---------------------------------------------------------------- 批量操作
+
+  async bulkUpdate(
+    ids: string[],
+    action: string,
+    payload: { tags?: string[]; collectionId?: string | null } = {}
+  ): Promise<{ updated: number; archived: number }> {
+    const unique = [...new Set(ids)].filter((id) => this.store.links.has(id));
+    if (unique.length === 0) throw new HttpError(400, '没有可操作的链接');
+    if (unique.length > 1000) throw new HttpError(400, '单次最多操作 1000 条链接');
+
+    if (action === 'archive') {
+      const targets = unique.filter((id) => this.store.findById(id)?.archiveStatus !== 'pending');
+      for (const id of targets) {
+        await this.archiveLink(id);
+      }
+      return { updated: targets.length, archived: targets.length };
+    }
+
+    if (action === 'delete') {
+      await this.mutex.run(async () => {
+        const paths = new Set<string>();
+        for (const id of unique) {
+          const link = this.store.findById(id);
+          if (!link) continue;
+          for (const path of await this.store.deleteLink(id)) paths.add(path);
+          for (const archivePath of [
+            link.archivePath,
+            link.readablePath,
+            link.screenshotPath,
+            link.pdfPath,
+          ]) {
+            if (!archivePath) continue;
+            for (const path of await this.store.deleteArchiveFile(archivePath)) paths.add(path);
+          }
+        }
+        await this.repo.commit([...paths], `bulk: delete ${unique.length} links`);
+        this.schedulePush();
+      });
+      return { updated: unique.length, archived: 0 };
+    }
+
+    if (action === 'setCollection') {
+      this.requireCollection(payload.collectionId);
+    }
+    if ((action === 'addTags' || action === 'removeTags') && !payload.tags) {
+      throw new HttpError(400, '缺少标签参数');
+    }
+
+    await this.mutex.run(async () => {
+      const now = new Date().toISOString();
+      const records: LinkRecord[] = [];
+      for (const id of unique) {
+        const link = this.store.findById(id);
+        if (!link) continue;
+        const updated: LinkRecord = { ...link, updatedAt: now };
+        switch (action) {
+          case 'addTags':
+            updated.tags = normalizeTags([...link.tags, ...(payload.tags ?? [])]);
+            break;
+          case 'removeTags': {
+            const remove = new Set((payload.tags ?? []).map((tag) => tag.toLowerCase()));
+            updated.tags = link.tags.filter((tag) => !remove.has(tag.toLowerCase()));
+            break;
+          }
+          case 'setCollection':
+            updated.collectionId = payload.collectionId ?? null;
+            break;
+          case 'pin':
+            updated.pinned = true;
+            break;
+          case 'unpin':
+            updated.pinned = false;
+            break;
+          default:
+            throw new HttpError(400, `不支持的操作: ${action}`);
+        }
+        records.push(updated);
+      }
+      if (records.length === 0) return;
+      const paths = await this.store.putLinksBulk(records);
+      await this.repo.commit(paths, `bulk: ${action} ${records.length} links`);
+      this.schedulePush();
+    });
+    return { updated: unique.length, archived: 0 };
+  }
+
   // ---------------------------------------------------------------- 高亮与批注
 
   async addHighlight(

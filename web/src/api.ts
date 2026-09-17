@@ -100,6 +100,16 @@ export const api = {
 
   deleteLink: (id: string) => request<{ ok: boolean }>(`/links/${id}`, { method: 'DELETE' }),
 
+  bulkUpdate: (
+    ids: string[],
+    action: string,
+    payload: { tags?: string[]; collectionId?: string | null } = {}
+  ) =>
+    request<{ updated: number; archived: number }>('/links/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action, ...payload }),
+    }),
+
   refetchLink: (id: string) => request<LinkRecord>(`/links/${id}/refetch`, { method: 'POST' }),
 
   archiveLink: (id: string) => request<LinkRecord>(`/links/${id}/archive`, { method: 'POST' }),
