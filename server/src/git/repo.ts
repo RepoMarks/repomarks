@@ -75,6 +75,7 @@ export class GitRepo {
       token: options.token,
       username: options.username,
       sshKeyPath: options.sshKeyPath,
+      remoteUrl: this.remoteUrl,
       authorName: options.authorName,
       authorEmail: options.authorEmail,
     });

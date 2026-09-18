@@ -15,6 +15,7 @@ export interface GitOptions {
   token?: string;
   username?: string;
   sshKeyPath?: string;
+  remoteUrl?: string;
   authorName: string;
   authorEmail: string;
 }
@@ -61,7 +62,16 @@ export class Git {
     if (!this.opts.token) return args;
     const user = this.opts.username || 'x-access-token';
     const basic = Buffer.from(`${user}:${this.opts.token}`).toString('base64');
-    args.push('-c', `http.extraheader=Authorization: Basic ${basic}`);
+    // 认证头必须限定在仓库主机：否则 git-lfs 上传对象时会把 Authorization
+    // 一起发给 S3 等存储端点，导致预签名 URL 认证失败
+    let headerKey = 'http.extraheader';
+    try {
+      const parsed = new URL(this.opts.remoteUrl ?? '');
+      if (parsed.protocol === 'https:') headerKey = `http.${parsed.origin}/.extraheader`;
+    } catch {
+      /* 无法解析时退回全局，SSH 模式不会走到这里 */
+    }
+    args.push('-c', `${headerKey}=Authorization: Basic ${basic}`);
     return args;
   }
 
