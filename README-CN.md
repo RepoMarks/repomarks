@@ -1,253 +1,265 @@
-# RepoMarks
+<div align="center">
+  <img src="docs/logo.png" width="112" alt="RepoMarks logo" />
 
-[English](README.md) · **中文**
+  # RepoMarks
 
-自部署的链接管理器（类似 [Linkwarden](https://github.com/linkwarden/linkwarden)），但**所有数据都存放在你自己的 Git 仓库里**（GitHub / Gitea / GitLab 均可），不需要数据库，也不依赖任何托管服务。
+  **进化版书签管理 —— 数据存进你自己的 Git 仓库。**
 
-服务只做三件事：把数据仓库 clone 到本地、读写 JSON 文件、把改动 commit & push 回去。备份 = 仓库本身，历史 = git log，迁移 = 换个仓库地址。
+  不需要数据库，不依赖托管后端。链接、网页存档、高亮批注都以纯文本/文件形式保存在你自己的仓库里。
 
-## 功能
+  [![Docker](https://github.com/RepoMarks/repomarks/actions/workflows/docker.yml/badge.svg)](https://github.com/RepoMarks/repomarks/actions/workflows/docker.yml)
+  ![Version](https://img.shields.io/github/package-json/v/RepoMarks/repomarks)
+  ![License](https://img.shields.io/github/license/RepoMarks/repomarks)
+  ![Stars](https://img.shields.io/github/stars/RepoMarks/repomarks)
 
-- 链接增删改查，自动抓取标题 / 描述 / 站点名 / favicon / OG 封面图
-- 收藏夹（支持多级目录）、标签、置顶、备注、全文搜索（支持 `tag:` 前缀）
-- **多格式网页存档**（gzip 压缩后存进仓库），详情页用标签页切换查看：
-  - `html`：单文件 HTML 完整存档，有 Chrome/Chromium 时用 [single-file-cli](https://github.com/gildas-lormeau/single-file-cli)（含图片/样式内联），没有浏览器时自动退化为轻量内联存档
-  - `readable`：正文提取（类似 Reader Mode），适合阅读
-  - `screenshot`：全页截图 PNG（需要 Chrome/Chromium）
-  - `pdf`：打印为 PDF（需要 Chrome/Chromium）
-  - `wayback`：提交到 Wayback Machine 并保存快照地址（可选，`ARCHIVE_WAYBACK=true`）
-- **阅读视图 + 高亮批注**：正文提取后可直接阅读，选中文字高亮、写批注，点击可定位回原文
-- **批量操作**：多选后批量打标签 / 移入收藏夹 / 置顶 / 抓取存档 / 删除
-- **公开分享**：收藏夹一键公开，生成只读分享页和 RSS 订阅源（可随时关闭）
-- **API 密钥**：为浏览器扩展（仓库内 `extension/`）和脚本等第三方客户端提供访问令牌
-- **标签管理 / 死链检查 / 稍后读**：重命名合并标签、批量检查失效链接、未读队列与批量标记
-- **全文搜索**：索引存仓库（`index/search.jsonl`），支持 `site:`、`after:`、`before:`、`is:pinned`、`is:dead`、`is:failed`、`is:read` 等语法与命中摘要
-- **Markdown 导出**：一键导出全部链接、单条复制、在仓库生成 `index/*.md` 收藏夹索引
-- **加密分享**：公开分享支持密码与有效期；外部 RSS 订阅可自动收纳进收藏夹
-- **兼容 API 与扩展**：`/api/v1`（Linkwarden 风格，供 Floccus 等使用）；浏览器扩展支持侧边栏与"选中文字存为高亮"
-- **BASE_PATH**：支持反向代理子路径部署
-- **可选 AI**：对接任意 OpenAI 兼容接口（本地 Ollama 或云端），支持标签/摘要、语义搜索与"书签问答"
-- **文件上传**：把图片 / PDF / HTML 作为书签保存；也可以给已有链接上传自己的 SingleFile / PDF / 截图存档
-- 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
-- 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`
-- 单用户密码登录（`AUTH_PASSWORD`）；深色 / 浅色 / 跟随系统主题，支持 PWA 安装，链接和收藏夹可自定义图标
-- 后台定时同步 + 写入后自动推送；多端同时修改时按 id 做语义合并（更新时间新者胜）
+  [English](README.md) · [路线图](ROADMAP.md) · [浏览器扩展](extension/) · [快速开始](#-快速开始)
 
-## 工作原理
+  <img src="docs/logo.png" width="0" height="0" alt="" />
+</div>
 
-```
-浏览器 ──HTTP──> RepoMarks 服务 ──git pull/push──> 数据仓库 (GitHub/Gitea/...)
-                     │
-                     ├── 本地 clone (DATA_DIR)
-                     ├── 内存索引（搜索/标签/收藏夹）
-                     └── archives/ 网页存档 (html.gz)
-```
+---
 
-写入流程：写文件 → `git commit` → 异步 push。push 被拒绝（远端有新提交）时自动 fetch + merge；`links/*.jsonl` 与 `collections.json` 冲突走语义合并（按 `id` 求并集，`updatedAt` 较新的记录优先），合并后再重试 push。单用户场景下基本不会产生冲突。
+## 💡 为什么用 RepoMarks？
 
-## 数据仓库里的结构
+大多数书签工具把数据存在自己的数据库里，RepoMarks 把它存在**你的 Git 仓库**里：
 
-```
-meta.json              仓库元信息
-collections.json       收藏夹（JSON 数组）
-links/0000.jsonl       链接分片，每片 1000 条，每行一条 JSON 记录
-links/0001.jsonl
-archives/<id>.html.gz  网页存档（gzip 压缩的单文件 HTML）
-```
+- **存储完全属于你** —— 服务只做 clone、改文件、push。备份就是 `git clone`，历史就是 `git log`，迁移只是改一个地址
+- **文件可读可改** —— 链接是 JSONL、收藏夹是 JSON、网页存档是 gzip 后的单文件 HTML，旁边还有截图和 PDF；可以直接 grep、diff、手改
+- **天然多设备** —— 每个实例拉取/推送同一个仓库，冲突按记录合并（`updatedAt` 新者胜）
+- **没有额外基础设施** —— 没有 Postgres、Redis、对象存储；一个容器 + 一个私有仓库就够了
 
-> 为什么用分片 JSONL：一万条链接只有 10 个文件，clone/pull 快；新增/修改只产生一行 diff；同时可读可 grep，也能直接用编辑器改。
+## ✨ 功能
 
-## 快速开始
+**📥 收集**
+- 粘贴 URL 自动抓取标题、描述、站点名、favicon 和 OG 封面图
+- 导入浏览器书签（Chrome / Edge / Firefox 导出的 HTML）与 JSON（含 Linkwarden 导出）
+- 图片 / PDF / HTML 可上传为书签，也可给已有链接上传自己的 SingleFile / PDF / 截图存档
+- 浏览器扩展（侧边栏 + 右键菜单）、书签小工具、PWA 分享目标、手机"分享到应用"
 
-### 1. 准备数据仓库
+**🏛️ 存档**
+- 多种格式一并存入仓库：单文件 **HTML**、**阅读版**正文、整页**截图**、**PDF**，可选提交 **Wayback Machine**
+- 自动为 `archives/**`、`files/**` 启用 Git LFS，clone 依然轻快
+- 定时重新存档过期页面；支持按格式清理，以及历史瘦身脚本
 
-1. 在 GitHub / Gitea / GitLab 新建一个**私有仓库**（可以是空仓库），例如 `link-data`
-2. 按 [获取访问令牌](#获取访问令牌) 创建最小权限的令牌
-3. 记下仓库地址，例如 `https://github.com/yourname/link-data.git`
+**📖 阅读与批注**
+- 阅读版正文提取，5 种颜色高亮 + 批注，点击回到原文位置
+- 归档全文搜索（索引存仓库）与命中摘要，支持 `site:`、`after:`、`before:`、`is:pinned`、`is:dead`、`is:read` 等语法
+- 稍后读队列与未读/已读状态；批量打标签、移动、置顶、存档、删除
 
-### 2. 配置并启动
+**🗂️ 整理与检索**
+- 多级收藏夹（颜色、自定义图标、手动排序）；标签重命名 / 合并 / 删除
+- 置顶、备注、自定义图标、重复链接检测与合并
+- 失效链接检测（记录 HTTP 状态与检查时间）
 
-```bash
-cp .env.example .env
-# 编辑 .env，至少填写 REPO_URL、GIT_TOKEN、AUTH_PASSWORD
-npm install
-npm run build
-npm start
-```
+**🌐 分享与同步**
+- 收藏夹公开分享：只读页面 + RSS，可加**密码与有效期**
+- 外部 RSS 订阅源自动收纳进指定收藏夹
+- Linkwarden 兼容的 `/api/v1` 接口（Floccus 等客户端可直接接入）；按客户端发放 **API 密钥**
+- 导出 JSON / Markdown，并生成 `index/*.md` 收藏夹索引，方便在 GitHub 上浏览
 
-打开 `http://localhost:3000`，输入 `AUTH_PASSWORD` 登录即可。
+**🤖 AI（可选）**
+- 通过任意 OpenAI 兼容接口生成标签与摘要
+- 语义搜索与"书签问答"，向量索引同样存在仓库里
 
-### 3. Docker 部署（推荐）
+**🛠️ 运维**
+- 单密码登录、深色/浅色/跟随系统主题、可安装为 PWA、中英文界面
+- Docker healthcheck、`/api/health`、后台定时同步、反向代理子路径（`BASE_PATH`）
 
-直接使用已发布的镜像（amd64 / arm64）：
+## 🚀 快速开始
+
+### 1. 创建数据仓库
+
+在 GitHub / Gitea / GitLab 新建一个**私有空仓库**，例如 `link-data`。
+
+### 2. 启动服务
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填仓库信息
+# 克隆本项目后：
+cp .env.example .env      # 填写 REPO_URL、GIT_TOKEN、AUTH_PASSWORD
 docker compose up -d
 ```
 
-或从源码构建：
+打开 `http://localhost:3000` 登录即可。镜像内置 `git`、`git-lfs` 与 `chromium`，完整存档开箱可用。
+
+<details>
+<summary>不用 Docker 运行</summary>
 
 ```bash
-docker compose up -d --build
+npm install && npm run build && npm start
 ```
+需要 Node 20+；`git-lfs` 可选（用于 LFS 存储）。
+</details>
 
-也可以不用 compose：
+<details>
+<summary>直接 docker run</summary>
 
 ```bash
 docker run -d --name repomarks -p 3000:3000 \
   -e REPO_URL=https://github.com/you/link-data.git \
   -e GIT_TOKEN=github_pat_xxx \
-  -e AUTH_PASSWORD=your-password \
+  -e AUTH_PASSWORD=你的密码 \
   -v "$PWD/data:/data" \
   ghcr.io/repomarks/repomarks:latest
 ```
+镜像标签：`latest`、`vX.Y.Z`、`main`、`sha-xxxxxxxx`。
+</details>
 
-镜像基于 Alpine，自带 `git` 和 `chromium`，网页存档默认就是完整存档模式，数据目录挂载在 `./data`。
+### 3. 创建访问令牌
 
-镜像标签：`latest`（最新 release）、`vX.Y.Z` / `vX.Y`（版本号）、`main`、`sha-xxxxxxxx`。
+服务通过 HTTPS + 最小权限令牌读写仓库，令牌只保存在 `.env`，不会写进 `.git/config`。
 
-## 获取访问令牌
+<details>
+<summary><b>GitHub</b>（推荐 Fine-grained token）</summary>
 
-服务通过 HTTPS + 令牌读写数据仓库。令牌只保存在 `.env`（已被 .gitignore 排除），不会写进 `.git/config`、浏览器或数据仓库。
+1. 打开 <https://github.com/settings/personal-access-tokens/new>
+2. **Repository access** 选 `Only select repositories`，只勾选数据仓库
+3. **Permissions → Contents** 设为 `Read and write`，其它保持 `No access`
+4. 生成后复制 `github_pat_...` 到 `GIT_TOKEN`；`GIT_USERNAME` 保持默认 `x-access-token`
 
-### GitHub（推荐 Fine-grained token）
+*Classic token（`repo` 范围）也能用，但权限覆盖你名下所有仓库。*
+</details>
 
-1. 打开 https://github.com/settings/personal-access-tokens/new
-   （或：头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token）
-2. **Token name** 随意，例如 `repomarks`
-3. **Expiration** 选 90 天或自定义；到期后重新生成并在 `.env` 里替换即可
-4. **Repository access** 选 `Only select repositories`，只勾选你的数据仓库
-5. **Permissions → Repository permissions → Contents** 设为 `Read and write`
-   （`Metadata` 会自动变成只读，其它权限全部保持 `No access`）
-6. 点 **Generate token**，复制 `github_pat_...`（只显示这一次）→ 填到 `.env` 的 `GIT_TOKEN`
-7. `GIT_USERNAME` 保持默认的 `x-access-token`
+<details>
+<summary><b>Gitea</b></summary>
 
-> 也可以使用 Classic token（https://github.com/settings/tokens/new，勾选 `repo` 范围），但权限覆盖你名下所有仓库，安全性不如细粒度令牌。
+1. 头像 → 设置 → 应用 → 管理 Access Tokens
+2. 权限勾选 `repository` 的 **Read and Write**
+3. 令牌填入 `GIT_TOKEN`，`GIT_USERNAME` 填你的用户名
+</details>
 
-### Gitea
+<details>
+<summary><b>GitLab</b></summary>
 
-1. 右上角头像 → 设置 → 应用 → 管理 Access Tokens
-   （或直接访问 `https://你的gitea域名/user/settings/applications`）
-2. 名称随意，权限只勾选 `repository` 的 **Read and Write**
-3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
-4. `GIT_USERNAME` 填你的 Gitea 用户名
+1. 头像 → Edit profile → Access tokens → 勾选 `write_repository`
+2. 令牌填入 `GIT_TOKEN`，设置 `GIT_USERNAME=oauth2`
+</details>
 
-### GitLab
-
-1. 头像 → Edit profile → Access tokens
-   （或 https://gitlab.com/-/user_settings/personal_access_tokens）
-2. 勾选 **`write_repository`** 范围（自动包含 `read_repository`）并设置有效期
-3. 生成后复制令牌 → 填到 `.env` 的 `GIT_TOKEN`
-4. `GIT_USERNAME=oauth2`
-
-### SSH 方式（不想用令牌）
-
-生成或复用已有密钥后，在 `.env` 里配置：
+<details>
+<summary><b>用 SSH 代替令牌</b></summary>
 
 ```ini
 REPO_URL=git@github.com:you/link-data.git
-GIT_SSH_KEY=/path/to/id_ed25519    # Docker 部署需把密钥挂载进容器
-GIT_TOKEN=                          # 留空
+GIT_SSH_KEY=/path/to/id_ed25519   # Docker 部署需挂载进容器
+GIT_TOKEN=
+```
+</details>
+
+## ⚙️ 工作原理
+
+```
+浏览器 ──HTTP──▶ RepoMarks ──git pull/push──▶ 数据仓库 (GitHub / Gitea / GitLab)
+                    │
+                    ├── 本地 clone (DATA_DIR)
+                    ├── 内存索引（搜索、标签、向量）
+                    └── archives/ · files/ · index/（LFS 跟踪）
 ```
 
-### 安全建议
+每次写入都会先更新文件并本地提交，再在后台推送。推送被拒时自动 fetch + merge：`links/*.jsonl` 与 `collections.json` 按记录合并（`id` 并集，`updatedAt` 新者胜）。后台轮询会把其它设备（或你手动在仓库里）的改动拉下来。
 
-- 令牌只授予这一个数据仓库的最小权限，不要用账号全量权限的令牌
-- 怀疑泄露时，在平台撤销旧令牌并生成新的，更新 `.env` 后重启服务即可
-- 数据仓库建议设为私有；服务本身不要直接暴露公网，需要时放在反向代理后面
+## 🗃️ 仓库结构
 
-## 开发
-
-```bash
-npm install
-npm run dev        # 后端 :3000（tsx watch）+ 前端 :5173（Vite，/api 自动代理）
-npm run typecheck
-npm run build
-npm run smoke      # 冒烟测试：核心同步流程 + HTTP 全链路（用临时 bare 仓库，不影响真实数据）
+```
+meta.json                仓库元信息
+collections.json         收藏夹
+links/0000.jsonl         链接分片（每片 1000 条，每行一条 JSON）
+archives/<id>.html.gz    单文件 HTML 存档（gzip）
+archives/<id>.txt.gz     阅读版正文
+archives/<id>.png        整页截图
+archives/<id>.pdf        PDF
+files/<id>.<ext>         上传的文件
+index/search.jsonl       全文索引
+index/embeddings.jsonl   AI 向量
+index/*.md               生成的收藏夹索引
 ```
 
-针对真实 GitHub 仓库的端到端测试（会创建临时数据目录，往指定仓库读写测试数据）：
-
-```bash
-# REPO_URL 指向一个用于测试的私有仓库，GIT_TOKEN 需有该仓库 Contents 读写权限
-REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/github-e2e.mjs
-```
-
-## Git LFS
-
-存档截图（PNG）、PDF、上传文件这些二进制内容很容易把仓库撑大。检测到 `git-lfs` 时，RepoMarks 会自动对 `archives/**` 和 `files/**` 启用 LFS（`GIT_LFS=auto`），把规则写入数据仓库的 `.gitattributes`，大文件以 LFS 指针形式进入 Git。
-
-- 宿主机需安装 `git-lfs`；Docker 镜像已内置
-- `GIT_LFS=true` 表示强制要求（未安装则启动失败），`GIT_LFS=false` 关闭 LFS
-- 注意 Git 平台自身的 LFS 配额（GitHub 免费账号每月 1GB 存储 + 1GB 流量）
-- 只有新文件走 LFS；如需转换已有历史，停止服务后执行：
-
-```bash
-node scripts/migrate-to-lfs.mjs ./data          # 本地重写历史
-node scripts/migrate-to-lfs.mjs ./data --push   # 强制推送重写后的历史
-```
-
-> 历史迁移会重写所有涉及这些路径的提交，其他克隆需要重新 clone。
-
-## 环境变量
+<details>
+<summary><b>环境变量</b></summary>
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `REPO_URL` | 必填 | 数据仓库地址（https 或 ssh） |
-| `GIT_TOKEN` | - | HTTPS 访问令牌；SSH 方式可留空 |
-| `GIT_USERNAME` | `x-access-token` | HTTPS Basic 用户名：GitHub 保持默认，Gitea 填用户名，GitLab 填 `oauth2` |
+| `REPO_URL` | 必填 | 数据仓库地址（HTTPS 或 SSH） |
+| `GIT_TOKEN` | - | HTTPS 访问令牌；SSH 方式留空 |
+| `GIT_USERNAME` | `x-access-token` | GitHub 保持默认 · Gitea 填用户名 · GitLab 填 `oauth2` |
 | `GIT_BRANCH` | `main` | 分支 |
-| `GIT_SSH_KEY` | - | SSH 私钥路径（仅 SSH 方式） |
-| `GIT_LFS` | `auto` | `auto` 检测到 git-lfs 即启用 / `true` 强制 / `false` 关闭 |
+| `GIT_SSH_KEY` | - | SSH 私钥路径 |
+| `GIT_LFS` | `auto` | `auto` / `true` / `false`，`archives/**` 与 `files/**` 走 LFS |
 | `DATA_DIR` | `./data` | 本地 clone 目录（Docker 中为 `/data`） |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | 监听地址 |
-| `AUTH_PASSWORD` | - | 访问密码，留空则不启用登录（不建议） |
-| `SESSION_SECRET` | 派生值 | 会话签名密钥，留空则按密码+仓库地址派生 |
+| `BASE_PATH` | - | 反向代理子路径，例如 `/repomarks` |
+| `AUTH_PASSWORD` | - | 登录密码，留空则不启用登录 |
+| `SESSION_SECRET` | 派生值 | 会话签名密钥 |
 | `SHARD_SIZE` | `1000` | 每个 JSONL 分片的记录数 |
-| `SYNC_INTERVAL` | `60` | 后台同步间隔（秒），`0` 表示关闭定时同步 |
-| `FETCH_TIMEOUT` | `15000` | 抓取元数据超时（毫秒） |
+| `SYNC_INTERVAL` | `60` | 后台同步间隔（秒） |
+| `FETCH_TIMEOUT` | `15000` | 元数据抓取超时（毫秒） |
 | `ARCHIVE_ENGINE` | `auto` | `auto` / `singlefile` / `basic` / `off` |
-| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | 启用的存档格式，逗号分隔，可选 `wayback` |
-| `ARCHIVE_WAYBACK` | `false` | 是否把页面提交到 Wayback Machine |
-| `ARCHIVE_BROWSER_PATH` | 自动探测 | Chrome/Chromium 可执行文件路径 |
-| `ARCHIVE_BROWSER_ARGS` | - | 浏览器启动参数，逗号分隔（Docker 中为 `--no-sandbox,--disable-dev-shm-usage`） |
+| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | 存档格式（`wayback` 需显式开启） |
+| `ARCHIVE_WAYBACK` | `false` | 提交页面到 Wayback Machine |
+| `ARCHIVE_BROWSER_PATH` | 自动探测 | Chrome/Chromium 路径 |
+| `ARCHIVE_BROWSER_ARGS` | - | 浏览器参数（Docker 用 `--no-sandbox,--disable-dev-shm-usage`） |
 | `ARCHIVE_TIMEOUT` | `90000` | 单次存档超时（毫秒） |
-| `AI_BASE_URL` | - | OpenAI 兼容接口地址（如 `https://api.openai.com/v1`），留空则关闭 AI 功能 |
-| `AI_API_KEY` | - | AI 接口密钥（本地 Ollama 可不填） |
-| `AI_MODEL` | - | 模型名，如 `gpt-4o-mini` 或 `llama3.1` |
-| `AI_TIMEOUT` | `30000` | AI 请求超时（毫秒） |
-| `ALLOW_PRIVATE_URLS` | `false` | 是否允许抓取内网地址（默认禁止，防 SSRF） |
-| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | 提交作者信息 |
+| `REFRESH_ARCHIVE_DAYS` / `REFRESH_ARCHIVE_LIMIT` | `0` / `5` | 超过 N 天的存档自动重新抓取 |
+| `FEED_SYNC_INTERVAL_HOURS` | `0` | 每 N 小时同步收藏夹的 RSS 订阅源 |
+| `FULLTEXT_INDEX` / `FULLTEXT_MAX_CHARS` | `true` / `2000` | 全文索引开关与每条链接的索引字符数 |
+| `ALLOW_PRIVATE_URLS` | `false` | 允许抓取内网地址 |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | - | AI 功能的 OpenAI 兼容接口 |
+| `AI_EMBEDDING_MODEL` | - | 语义搜索的向量模型 |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | 提交作者 |
 
-## API
+</details>
+
+<details>
+<summary><b>REST API</b></summary>
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/auth/login` | 登录，body `{password}` |
-| GET | `/api/links` | 搜索，参数 `q`、`collection`、`tag`、`archived`、`sort`、`order`、`page`、`perPage` |
-| POST | `/api/links` | 新建链接，`fetchMetadata: false` 可跳过抓取 |
+| POST | `/api/auth/login` | 登录 `{password}` |
+| GET | `/api/links` | 搜索（`q`、`collection`、`tag`、`archived`、`read`、`sort`、`order`、`page`、`perPage`） |
+| POST | `/api/links` | 新建链接（`fetchMetadata: false` 跳过抓取） |
+| POST | `/api/links/bulk` | 批量 `addTags` / `removeTags` / `setCollection` / `pin` / `read` / `archive` / `delete` |
+| POST | `/api/links/check` | 失效链接检查（可选 `ids`） |
 | PATCH / DELETE | `/api/links/:id` | 修改 / 删除 |
-| POST | `/api/links/:id/archive` | 触发网页存档（异步） |
-| GET | `/api/links/:id/archive` | 查看存档 HTML |
-| POST | `/api/links/:id/refetch` | 重新抓取元数据 |
-| GET / POST | `/api/collections` | 收藏夹列表 / 新建 |
-| PATCH / DELETE | `/api/collections/:id` | 修改 / 删除 |
-| GET | `/api/tags` | 标签及计数 |
-| POST | `/api/import` | 导入，body `{html}` 或 `{json}` |
-| GET | `/api/export` | 导出全部数据 JSON |
-| GET | `/api/status` | 仓库状态、同步状态、存档引擎、统计 |
-| POST | `/api/sync` | 手动同步（pull + push） |
+| POST | `/api/links/:id/archive` | 触发存档（异步） |
+| GET | `/api/links/:id/archive` | 查看存档（`?format=readable\|screenshot\|pdf`） |
+| POST | `/api/links/:id/ai` | AI 标签与摘要 |
+| POST | `/api/ai/embed` / `/api/ai/search` / `/api/ai/chat` | 语义索引、语义搜索、书签问答 |
+| POST | `/api/collections/:id/feed/sync` | 同步收藏夹的 RSS 订阅源 |
+| GET / PATCH / DELETE | `/api/collections` | 收藏夹 |
+| PATCH / DELETE | `/api/tags/:tag` | 重命名 / 删除标签 |
+| POST | `/api/import` · GET `/api/export?format=markdown` | 导入 / 导出 |
+| GET | `/api/health` · `/api/status` · POST `/api/sync` | 健康检查、状态、手动同步 |
+| — | `/api/v1/*` | Linkwarden 兼容接口（API 密钥认证） |
 
-## 已知限制
+认证方式：会话 Cookie，或 `Authorization: Bearer <API 密钥>` / `X-API-Key`。
+</details>
 
-- **单用户**：一份部署对应一个密码、一个仓库；多人协作场景建议拆多个实例
-- **存档体积**：完整存档会让仓库变大（取决于网页），仓库膨胀后 clone 会变慢；可以只对重要链接存档
-- **无浏览器时**：轻量存档的内联质量有限，复杂的 SPA 页面效果一般；Docker 镜像已内置 chromium
-- **冲突合并**：按 `updatedAt` 新者胜，同一字段在两端的并发修改不会逐字段合并
-- 抓取目标站点的反爬（403/验证码）会导致元数据或存档失败，界面会显示失败原因
+## 🧩 客户端
 
-## License
+- **浏览器扩展** —— [`extension/`](extension/)：弹窗、侧边栏、右键菜单、`Ctrl+Shift+S`
+- **API 密钥** —— 设置 → API 密钥，供脚本、快捷指令和第三方应用使用
+- **Floccus 等** —— 把 Linkwarden 兼容客户端指向 `/api/v1`
+- **书签小工具** —— 在设置页把"保存小工具"拖到书签栏
+- **PWA** —— 浏览器安装到桌面/主屏，分享目标可直接接收手机分享的链接
 
-MIT
+## 🧪 开发
+
+```bash
+npm install
+npm run dev        # 后端 :3000（tsx watch）+ 前端 :5173（Vite）
+npm run typecheck
+npm run build
+npm run smoke      # 核心同步 + HTTP 全链路冒烟测试（使用临时 bare 仓库）
+```
+
+`scripts/` 里还有实用脚本：`migrate-to-lfs.mjs`、`repo-slim.mjs`、`github-e2e.mjs`、`check-i18n.ts`、`make-icons.mjs`。
+
+## ⚠️ 已知限制
+
+- **单用户** —— 一份部署对应一个密码、一个仓库；多人使用建议各自部署实例
+- **冲突合并** —— 按记录整体合并（`updatedAt` 新者胜），不做字段级合并
+- **仓库体积** —— 存档会持续增长；请配合 Git LFS、按格式清理与 `scripts/repo-slim.mjs`
+- **无浏览器环境** —— 轻量内联存档效果有限；Docker 镜像已内置 Chromium
+- **反爬页面** —— 403/验证码会导致抓取或存档失败，界面会显示具体原因
+
+## 📄 License
+
+[MIT](LICENSE)

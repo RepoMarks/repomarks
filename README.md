@@ -1,100 +1,97 @@
-# RepoMarks
+<div align="center">
+  <img src="docs/logo.png" width="112" alt="RepoMarks logo" />
 
-**English** · [中文](README-CN.md)
+  # RepoMarks
 
-A self-hosted bookmark manager (in the spirit of [Linkwarden](https://github.com/linkwarden/linkwarden)) where **all data lives in your own Git repository** on GitHub, Gitea, or GitLab. No database, no managed backend, no lock-in.
+  **Bookmarks, evolved — stored in your own Git repository.**
 
-The service clones your data repository locally, reads and writes plain files, and commits/pushes the changes back. Your backup is the repository itself, your audit log is `git log`, and migrating means pointing the app at another repo URL.
+  No database. No managed backend. Your links, snapshots and highlights live as plain files in a repo you own.
 
-## Features
+  [![Docker](https://github.com/RepoMarks/repomarks/actions/workflows/docker.yml/badge.svg)](https://github.com/RepoMarks/repomarks/actions/workflows/docker.yml)
+  ![Version](https://img.shields.io/github/package-json/v/RepoMarks/repomarks)
+  ![License](https://img.shields.io/github/license/RepoMarks/repomarks)
+  ![Stars](https://img.shields.io/github/stars/RepoMarks/repomarks)
 
-- Add, edit, and delete links with automatic metadata scraping (title, description, site name, favicon, OG image)
-- Collections (nested), tags, pinning, notes, and full-text search (supports `tag:` / `is:archived` prefixes)
-- **Multi-format page preservation**, stored gzip-compressed inside the repo and viewable in the app:
-  - `html` — single-file HTML archive; uses [single-file-cli](https://github.com/gildas-lormeau/single-file-cli) when Chrome/Chromium is available, otherwise falls back to a lightweight inliner
-  - `readable` — reader-mode text extraction
-  - `screenshot` — full-page PNG (requires Chrome/Chromium)
-  - `pdf` — print-to-PDF (requires Chrome/Chromium)
-  - `wayback` — submit the page to the Wayback Machine and store the snapshot URL (opt-in)
-- Upload images / PDFs / HTML files as bookmarks, and attach your own SingleFile / PDF / screenshot files to existing links
-- Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports (including Linkwarden); folders become collections and duplicate URLs are skipped
-- Export everything as JSON; all data files are human-readable and can be edited by hand before `git push`
-- Tag manager (rename / merge / delete), dead-link checker with `is:dead`, read-later queue (`is:unread`), duplicate-link merge, Markdown export and generated `index/*.md` collection indexes
-- Full-text search inside preserved pages (index committed to the repo), plus advanced query syntax (`site:`, `after:`, `before:`, `is:pinned`, `is:dead`, `is:failed`, `is:archived`, `is:read`, `is:unread`)
-- Encrypted public shares (password + expiry) and RSS feeds mirrored from external sources into a collection
-- Linkwarden-compatible `/api/v1` endpoints for Floccus and other clients, browser extension with side panel and "save selection as highlight"
-- `BASE_PATH` support for reverse-proxy sub-paths
-- Optional AI: tag/summary suggestions, semantic search and "Ask AI" chat over your preserved pages (OpenAI-compatible APIs such as Ollama)
-- Single-user password authentication, plus API keys for the bundled browser extension and other third-party clients
-- Public collection sharing with a read-only page and RSS feed
-- Bulk actions (tags, collection, pin, preserve, delete), highlights and annotations in the reader view
-- Dark / light / system theme, PWA-installable, custom icons for links and collections
-- Background sync and automatic push after writes; concurrent edits are merged semantically (newest `updatedAt` wins)
+  [中文文档](README-CN.md) · [Roadmap](ROADMAP.md) · [Browser extension](extension/) · [Quick start](#-quick-start)
 
-## How it works
+  <img src="docs/logo.png" width="0" height="0" alt="" />
+</div>
 
-```
-Browser ──HTTP──> RepoMarks service ──git pull/push──> data repository (GitHub/Gitea/GitLab)
-                       │
-                       ├── local clone (DATA_DIR)
-                       ├── in-memory index (search / tags / collections)
-                       └── archives/ (html.gz, txt.gz, png, pdf)
-```
+---
 
-On write: files are updated, committed locally, then pushed asynchronously. If the push is rejected (the remote moved ahead), the service fetches and merges; conflicts in `links/*.jsonl` and `collections.json` are resolved semantically (union of records by `id`, newest `updatedAt` wins) and the push is retried. In single-user use conflicts are rare.
+## 💡 Why RepoMarks?
 
-## Data layout in the repository
+Most bookmark managers keep your data in their database. RepoMarks keeps it in **your Git repository**:
 
-```
-meta.json               repository metadata
-collections.json        collections (JSON array)
-links/0000.jsonl        link shards, 1000 records per file, one JSON record per line
-links/0001.jsonl
-archives/<id>.html.gz   preserved HTML
-archives/<id>.txt.gz    reader-mode text
-archives/<id>.png       screenshot
-archives/<id>.pdf       PDF print
-```
+- **You own the storage** — the app only clones the repo, edits files, and pushes. Backups are `git clone`, history is `git log`, migration is changing one URL.
+- **Plain, readable files** — links are JSONL, collections are JSON, preserved pages are gzipped HTML next to screenshots and PDFs. Grep it, diff it, edit it by hand.
+- **Multi-device by nature** — every instance pulls and pushes the same repository; conflicts are merged per record (newest `updatedAt` wins).
+- **No infrastructure** — no Postgres, no Redis, no object storage. One container plus a private repo is the whole stack.
 
-> Why sharded JSONL: 10,000 links fit in ~10 files, so clones stay fast; adding or editing a link produces a one-line diff; and the files remain readable, greppable, and editable in any text editor.
+## ✨ Features
 
-## Quick start
+**📥 Collect**
+- Paste a URL and get title, description, site name, favicon and OG image automatically
+- Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports, including Linkwarden
+- Upload images / PDFs / HTML as bookmarks, or attach your own SingleFile / PDF / screenshot files to any link
+- Browser extension (side panel + context menu), bookmarklet, PWA share target, iOS/Android "share to app"
 
-### 1. Prepare a data repository
+**🏛️ Preserve**
+- Multi-format snapshots kept in the repo: single-file **HTML**, **reader** text, full-page **screenshot**, **PDF**, and optional **Wayback Machine** submission
+- Git LFS is enabled automatically for `archives/**` and `files/**` so clones stay small
+- Scheduled refresh re-preserves stale pages; per-format cleanup and a history-slimming script when the repo grows
 
-1. Create a **private** repository on GitHub / Gitea / GitLab (it can be empty), e.g. `link-data`
-2. Create a minimal access token — see [Access tokens](#access-tokens)
-3. Note the repository URL, e.g. `https://github.com/you/link-data.git`
+**📖 Read & annotate**
+- Reader view of the preserved text, highlight passages in 5 colors and attach notes
+- Full-text search across preserved pages, with match snippets (`site:`, `after:`, `before:`, `is:pinned`, `is:dead`, `is:read`, …)
+- Read-later queue with unread/read state, bulk actions for tags, collections, pinning, preservation and deletion
 
-### 2. Run with Node
+**🗂️ Organize & find**
+- Nested collections with colors, icons and manual ordering; tags with rename/merge/delete
+- Pin links, write notes, customize icons, detect and merge duplicates
+- Dead-link checker with HTTP status history
 
-```bash
-cp .env.example .env
-# edit .env: at minimum REPO_URL, GIT_TOKEN, AUTH_PASSWORD
-npm install
-npm run build
-npm start
-```
+**🌐 Share & sync**
+- Public collections with a read-only page, RSS feed, optional **password + expiry**
+- Mirror external RSS feeds into a collection automatically
+- Linkwarden-compatible `/api/v1` endpoints for Floccus and other clients; per-client **API keys**
+- Export everything as JSON or Markdown, and generate `index/*.md` collection indexes for browsing on GitHub
 
-Open `http://localhost:3000` and sign in with `AUTH_PASSWORD`.
+**🤖 AI (optional)**
+- Tag and summary suggestions through any OpenAI-compatible API
+- Semantic search and **"Ask AI"** chat over your preserved pages — embeddings are stored in the repo
 
-### 3. Run with Docker (recommended)
+**🛠️ Ops**
+- Single password login, dark/light/system theme, PWA-installable, English & 中文 UI
+- Docker healthcheck, `/api/health`, background sync, `BASE_PATH` support for reverse proxies
 
-Use the published image (amd64 / arm64):
+## 🚀 Quick start
+
+### 1. Create a data repository
+
+Create a **private** empty repository on GitHub / Gitea / GitLab, e.g. `link-data`.
+
+### 2. Run it
 
 ```bash
-cp .env.example .env
-# edit .env with your repository information
+# clone this project, then:
+cp .env.example .env      # set REPO_URL, GIT_TOKEN and AUTH_PASSWORD
 docker compose up -d
 ```
 
-Or build from source:
+Open `http://localhost:3000` and sign in. The container ships with `git`, `git-lfs` and `chromium`, so full-fidelity preservation works out of the box.
+
+<details>
+<summary>Run without Docker</summary>
 
 ```bash
-docker compose up -d --build
+npm install && npm run build && npm start
 ```
+Node 20+ and `git-lfs` (optional, for LFS storage) are required.
+</details>
 
-Without compose:
+<details>
+<summary>Run with plain docker run</summary>
 
 ```bash
 docker run -d --name repomarks -p 3000:3000 \
@@ -104,156 +101,165 @@ docker run -d --name repomarks -p 3000:3000 \
   -v "$PWD/data:/data" \
   ghcr.io/repomarks/repomarks:latest
 ```
+Image tags: `latest`, `vX.Y.Z`, `main`, `sha-xxxxxxxx`.
+</details>
 
-The image is Alpine-based and ships with `git` and `chromium`, so full-fidelity preservation (single-file HTML, screenshots, PDFs) works out of the box. Data is stored in `./data`.
+### 3. Create an access token
 
-Image tags: `latest` (latest release), `vX.Y.Z` / `vX.Y` (versions), `main`, `sha-xxxxxxxx`.
+The service reads and writes the repository over HTTPS with a minimal-scope token. It is stored only in `.env` and never written into `.git/config`.
 
-## Access tokens
+<details>
+<summary><b>GitHub</b> (fine-grained token recommended)</summary>
 
-The service reads and writes the data repository over HTTPS using a token. The token is stored only in `.env` (git-ignored) and is never written into `.git/config`, the browser, or the data repository.
+1. Open <https://github.com/settings/personal-access-tokens/new>
+2. **Repository access** → `Only select repositories` → your data repository
+3. **Permissions → Contents** → `Read and write`, everything else `No access`
+4. Generate and copy `github_pat_...` into `GIT_TOKEN`; keep `GIT_USERNAME=x-access-token`
 
-### GitHub (fine-grained token recommended)
+*Classic tokens (`repo` scope) also work but grant access to all your repositories.*
+</details>
 
-1. Open https://github.com/settings/personal-access-tokens/new
-   (or: avatar → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token)
-2. **Token name**: anything, e.g. `repomarks`
-3. **Expiration**: 90 days or a custom value; regenerate and update `.env` when it expires
-4. **Repository access**: `Only select repositories` → select only your data repository
-5. **Permissions → Repository permissions → Contents**: `Read and write`
-   (`Metadata` becomes read-only automatically; leave every other permission at `No access`)
-6. Click **Generate token** and copy `github_pat_...` (shown only once) into `GIT_TOKEN`
-7. Keep `GIT_USERNAME=x-access-token` (the default)
-
-> Classic tokens (https://github.com/settings/tokens/new, `repo` scope) also work, but they grant access to all your repositories. Prefer fine-grained tokens.
-
-### Gitea
+<details>
+<summary><b>Gitea</b></summary>
 
 1. Avatar → Settings → Applications → Manage Access Tokens
-   (or `https://your-gitea.example.com/user/settings/applications`)
-2. Name it anything and select only `repository` **Read and Write**
-3. Copy the generated token into `GIT_TOKEN`
-4. Set `GIT_USERNAME` to your Gitea username
+2. Permissions: `repository` **Read and Write**
+3. Put the token in `GIT_TOKEN`, set `GIT_USERNAME` to your username
+</details>
 
-### GitLab
+<details>
+<summary><b>GitLab</b></summary>
 
-1. Avatar → Edit profile → Access tokens
-   (or https://gitlab.com/-/user_settings/personal_access_tokens)
-2. Select the **`write_repository`** scope (this includes `read_repository`), set an expiry
-3. Copy the token into `GIT_TOKEN`
-4. Set `GIT_USERNAME=oauth2`
+1. Avatar → Edit profile → Access tokens → scope `write_repository`
+2. Put the token in `GIT_TOKEN`, set `GIT_USERNAME=oauth2`
+</details>
 
-### SSH instead of a token
-
-Generate or reuse a key pair, then set:
+<details>
+<summary><b>SSH instead of a token</b></summary>
 
 ```ini
 REPO_URL=git@github.com:you/link-data.git
-GIT_SSH_KEY=/path/to/id_ed25519    # mount the key into the container for Docker deployments
-GIT_TOKEN=                          # leave empty
+GIT_SSH_KEY=/path/to/id_ed25519   # mount into the container for Docker
+GIT_TOKEN=
+```
+</details>
+
+## ⚙️ How it works
+
+```
+Browser ──HTTP──▶ RepoMarks ──git pull/push──▶ data repository (GitHub / Gitea / GitLab)
+                     │
+                     ├── local clone (DATA_DIR)
+                     ├── in-memory index (search, tags, embeddings)
+                     └── archives/ · files/ · index/ (LFS-tracked)
 ```
 
-### Security notes
+On every write the service updates files, commits locally, then pushes in the background. If the push is rejected, it fetches and merges — `links/*.jsonl` and `collections.json` conflicts are merged per record (`id` union, newest `updatedAt` wins). Background polling pulls changes made on other devices, or directly in the repo.
 
-- Grant the token access to this one data repository only, with the minimum permissions
-- If a token leaks, revoke it on the platform, generate a new one, update `.env`, and restart the service
-- Keep the data repository private, and do not expose the service directly to the internet; put it behind a reverse proxy if needed
+## 🗃️ Repository layout
 
-## Development
-
-```bash
-npm install
-npm run dev        # backend on :3000 (tsx watch) + frontend on :5173 (Vite, /api proxied)
-npm run typecheck
-npm run build
-npm run smoke      # smoke tests: core git sync + HTTP API (uses temporary bare repos, safe)
+```
+meta.json                repository metadata
+collections.json         collections
+links/0000.jsonl         link shards (1000 records per file, one JSON per line)
+archives/<id>.html.gz    preserved HTML (single-file, gzipped)
+archives/<id>.txt.gz     reader-mode text
+archives/<id>.png        screenshot
+archives/<id>.pdf        PDF
+files/<id>.<ext>         uploaded files
+index/search.jsonl       full-text index
+index/embeddings.jsonl   AI embeddings
+index/*.md               generated collection indexes
 ```
 
-An end-to-end test against a real GitHub repository is also available (it writes test data to the given repo):
-
-```bash
-# REPO_URL must point to a test repository, GIT_TOKEN needs Contents read/write on it
-REPO_URL=https://github.com/you/link-data-test.git GIT_TOKEN=xxx node scripts/github-e2e.mjs
-```
-
-## Git LFS
-
-Binary files dominate repository size: screenshots (PNG) and PDFs, and even gzipped HTML archives. When `git-lfs` is available RepoMarks enables LFS for `archives/**` and `files/**` automatically (`GIT_LFS=auto`), writes the rules into the data repository's `.gitattributes`, and keeps large files out of the regular Git object store.
-
-- Install `git-lfs` on the host; the Docker image already includes it
-- `GIT_LFS=true` fails fast when git-lfs is missing, `GIT_LFS=false` disables LFS entirely
-- The usual quota rules of your Git host apply (GitHub free accounts include 1 GB LFS storage + 1 GB bandwidth per month)
-- Only newly added files go through LFS. To convert existing history, stop the service and run:
-
-```bash
-node scripts/migrate-to-lfs.mjs ./data          # rewrite history locally
-node scripts/migrate-to-lfs.mjs ./data --push   # force-push the rewritten history
-```
-
-> History migration rewrites every commit that touched those paths, so existing clones must be re-cloned.
-
-## Environment variables
+<details>
+<summary><b>Environment variables</b></summary>
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `REPO_URL` | required | Data repository URL (HTTPS or SSH) |
 | `GIT_TOKEN` | - | HTTPS access token; leave empty for SSH |
-| `GIT_USERNAME` | `x-access-token` | HTTPS username: keep the default for GitHub, use your username for Gitea, `oauth2` for GitLab |
+| `GIT_USERNAME` | `x-access-token` | GitHub: keep default · Gitea: your username · GitLab: `oauth2` |
 | `GIT_BRANCH` | `main` | Branch |
-| `GIT_SSH_KEY` | - | Path to the SSH private key (SSH only) |
-| `GIT_LFS` | `auto` | `auto` (enable when git-lfs is installed) / `true` (require it) / `false` |
+| `GIT_SSH_KEY` | - | SSH private key path |
+| `GIT_LFS` | `auto` | `auto` / `true` / `false` — LFS for `archives/**` and `files/**` |
 | `DATA_DIR` | `./data` | Local clone directory (`/data` in Docker) |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Listen address |
-| `AUTH_PASSWORD` | - | Login password; leaving it empty disables authentication (not recommended) |
-| `SESSION_SECRET` | derived | Session signing secret; derived from password + repo URL when empty |
+| `BASE_PATH` | - | Sub-path deployment, e.g. `/repomarks` |
+| `AUTH_PASSWORD` | - | Login password (leaving it empty disables auth) |
+| `SESSION_SECRET` | derived | Session signing secret |
 | `SHARD_SIZE` | `1000` | Records per JSONL shard |
-| `SYNC_INTERVAL` | `60` | Background sync interval in seconds; `0` disables it |
-| `FETCH_TIMEOUT` | `15000` | Metadata fetch timeout in milliseconds |
+| `SYNC_INTERVAL` | `60` | Background sync interval in seconds |
+| `FETCH_TIMEOUT` | `15000` | Metadata fetch timeout (ms) |
 | `ARCHIVE_ENGINE` | `auto` | `auto` / `singlefile` / `basic` / `off` |
-| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | Enabled preservation formats (comma-separated; `wayback` is also accepted) |
+| `ARCHIVE_FORMATS` | `html,readable,screenshot,pdf` | Preservation formats (`wayback` opt-in) |
 | `ARCHIVE_WAYBACK` | `false` | Submit pages to the Wayback Machine |
-| `ARCHIVE_BROWSER_PATH` | auto-detected | Path to Chrome/Chromium (for full archives and screenshots/PDFs) |
-| `ARCHIVE_BROWSER_ARGS` | - | Extra browser arguments, comma-separated (`--no-sandbox,--disable-dev-shm-usage` in Docker) |
-| `ARCHIVE_TIMEOUT` | `90000` | Timeout per preservation operation in milliseconds |
-| `AI_BASE_URL` | - | OpenAI-compatible API base URL (e.g. `https://api.openai.com/v1`); leave empty to disable AI features |
-| `AI_API_KEY` | - | API key for the AI provider (optional for local Ollama) |
-| `AI_MODEL` | - | Model name, e.g. `gpt-4o-mini` or `llama3.1` |
-| `AI_EMBEDDING_MODEL` | - | Embedding model for semantic search, e.g. `text-embedding-3-small` or `nomic-embed-text` |
-| `AI_TIMEOUT` | `30000` | AI request timeout in milliseconds |
-| `BASE_PATH` | - | Serve under a sub-path, e.g. `/repomarks` (also build the web app with `VITE_BASE_PATH`) |
-| `REFRESH_ARCHIVE_DAYS` / `REFRESH_ARCHIVE_LIMIT` | `0` / `5` | Re-preserve snapshots older than N days, at most M per run |
-| `FEED_SYNC_INTERVAL_HOURS` | `0` | Sync collection RSS feeds every N hours (0 = manual only) |
-| `FULLTEXT_INDEX` / `FULLTEXT_MAX_CHARS` | `true` / `2000` | Index preserved text for full-text search and the per-link character budget |
-| `ALLOW_PRIVATE_URLS` | `false` | Allow fetching private/internal addresses (disabled to prevent SSRF) |
-| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | Commit author for data repository commits |
+| `ARCHIVE_BROWSER_PATH` | auto | Chrome/Chromium path for full archives |
+| `ARCHIVE_BROWSER_ARGS` | - | Extra browser args (Docker: `--no-sandbox,--disable-dev-shm-usage`) |
+| `ARCHIVE_TIMEOUT` | `90000` | Timeout per preservation (ms) |
+| `REFRESH_ARCHIVE_DAYS` / `REFRESH_ARCHIVE_LIMIT` | `0` / `5` | Re-preserve snapshots older than N days |
+| `FEED_SYNC_INTERVAL_HOURS` | `0` | Sync collection RSS feeds every N hours |
+| `FULLTEXT_INDEX` / `FULLTEXT_MAX_CHARS` | `true` / `2000` | Full-text index and per-link character budget |
+| `ALLOW_PRIVATE_URLS` | `false` | Allow fetching private/internal addresses |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | - | OpenAI-compatible endpoint for AI features |
+| `AI_EMBEDDING_MODEL` | - | Embedding model for semantic search |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | Commit author |
 
-## API
+</details>
+
+<details>
+<summary><b>REST API</b></summary>
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | POST | `/api/auth/login` | Log in with `{password}` |
-| GET | `/api/links` | Search with `q`, `collection`, `tag`, `archived`, `sort`, `order`, `page`, `perPage` |
-| POST | `/api/links` | Create a link; `fetchMetadata: false` skips metadata scraping |
-| PATCH / DELETE | `/api/links/:id` | Update / delete a link |
-| POST | `/api/links/:id/archive` | Start preservation (asynchronous) |
-| GET | `/api/links/:id/archive` | View the HTML archive; add `?format=readable\|screenshot\|pdf` for other formats |
-| POST | `/api/links/:id/refetch` | Re-scrape metadata |
-| GET / POST | `/api/collections` | List / create collections |
-| PATCH / DELETE | `/api/collections/:id` | Update / delete a collection |
-| GET | `/api/tags` | Tags with counts |
-| POST | `/api/import` | Import `{html}` or `{json}` |
-| GET | `/api/export` | Export all data as JSON |
-| GET | `/api/status` | Repository status, sync state, preservation engine, stats |
-| POST | `/api/sync` | Manual sync (pull + push) |
+| GET | `/api/links` | Search (`q`, `collection`, `tag`, `archived`, `read`, `sort`, `order`, `page`, `perPage`) |
+| POST | `/api/links` | Create a link (`fetchMetadata: false` skips scraping) |
+| POST | `/api/links/bulk` | Bulk `addTags` / `removeTags` / `setCollection` / `pin` / `read` / `archive` / `delete` |
+| POST | `/api/links/check` | Dead-link check (`ids` optional) |
+| PATCH / DELETE | `/api/links/:id` | Update / delete |
+| POST | `/api/links/:id/archive` | Preserve (async) |
+| GET | `/api/links/:id/archive` | View archive (`?format=readable\|screenshot\|pdf`) |
+| POST | `/api/links/:id/ai` | AI tags & summary |
+| POST | `/api/ai/embed` / `/api/ai/search` / `/api/ai/chat` | Semantic index, search and Q&A |
+| POST | `/api/collections/:id/feed/sync` | Sync a collection's RSS feed |
+| GET / PATCH / DELETE | `/api/collections` | Collections |
+| PATCH / DELETE | `/api/tags/:tag` | Rename / delete a tag |
+| POST | `/api/import` · GET `/api/export?format=markdown` | Import and export |
+| GET | `/api/health` · `/api/status` · POST `/api/sync` | Health, status, manual sync |
+| — | `/api/v1/*` | Linkwarden-compatible API (API key auth) |
 
-## Known limitations
+Authenticate with the session cookie or `Authorization: Bearer <API key>` / `X-API-Key`.
+</details>
 
-- **Single user**: one deployment serves one password and one repository; run multiple instances for multiple users
-- **Archive size**: full-fidelity archives can grow the repository; clone times grow with it, so preserve selectively
-- **Without a browser**: the lightweight inliner is limited and complex SPAs may not render well; the Docker image ships with chromium
-- **Conflict merging**: newest `updatedAt` wins per record; concurrent edits to the same fields are not merged field by field
-- Anti-bot protections (403 / CAPTCHA) on target sites can make metadata scraping or preservation fail; the UI shows the error
+## 🧩 Clients
 
-## License
+- **Browser extension** — [`extension/`](extension/): popup, side panel, context menus, `Ctrl+Shift+S`
+- **API keys** — Settings → API keys; use them for scripts, shortcuts and third-party apps
+- **Floccus & friends** — point Linkwarden-compatible clients at `/api/v1`
+- **Bookmarklet** — drag the link from Settings → Save bookmarklet to your bookmarks bar
+- **PWA** — install from the browser; the share target receives URLs from mobile share sheets
 
-MIT
+## 🧪 Development
+
+```bash
+npm install
+npm run dev        # backend :3000 (tsx watch) + frontend :5173 (Vite)
+npm run typecheck
+npm run build
+npm run smoke      # core + HTTP smoke tests on temporary bare repos
+```
+
+`scripts/` also contains utilities: `migrate-to-lfs.mjs`, `repo-slim.mjs`, `github-e2e.mjs`, `check-i18n.ts`, `make-icons.mjs`.
+
+## ⚠️ Known limitations
+
+- **Single user** — one deployment, one password, one repository; run several instances for several people
+- **Conflict merging** — per record, newest `updatedAt` wins; field-level merges are not attempted
+- **Repository growth** — snapshots add up; use Git LFS, per-format cleanup and `scripts/repo-slim.mjs`
+- **No browser** — the lightweight inliner is limited; the Docker image ships with Chromium
+- **Anti-bot pages** — 403/CAPTCHA targets can make scraping or preservation fail; the UI shows the error
+
+## 📄 License
+
+[MIT](LICENSE)
