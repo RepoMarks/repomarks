@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { useI18n } from '../i18n';
 import { collectionOptions } from './CollectionSelect';
 import Modal from './Modal';
 import type { Collection } from '../types';
@@ -17,6 +18,7 @@ export default function CollectionDialog({
   onClose,
   onChanged,
 }: CollectionDialogProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description ?? '');
   const [parentId, setParentId] = useState(collection.parentId ?? '');
@@ -45,9 +47,9 @@ export default function CollectionDialog({
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      setMessage('已复制到剪贴板');
+      setMessage(t('已复制到剪贴板'));
     } catch {
-      window.prompt('复制链接', value);
+      window.prompt(t('复制链接'), value);
     }
   };
 
@@ -64,7 +66,7 @@ export default function CollectionDialog({
         isPublic,
       });
       setSlug(updated.slug ?? '');
-      setMessage('已保存');
+      setMessage(t('已保存'));
       onChanged();
     } catch (err) {
       setError((err as Error).message);
@@ -74,7 +76,9 @@ export default function CollectionDialog({
   };
 
   const remove = async () => {
-    if (!window.confirm(`删除收藏夹「${collection.name}」？其中的链接会变为未分类。`)) return;
+    if (!window.confirm(t('删除收藏夹「{name}」？其中的链接会变为未分类。', { name: collection.name }))) {
+      return;
+    }
     setBusy(true);
     try {
       await api.deleteCollection(collection.id);
@@ -87,35 +91,35 @@ export default function CollectionDialog({
   };
 
   return (
-    <Modal title="收藏夹设置" onClose={onClose} width={520}>
+    <Modal title={t('收藏夹设置')} onClose={onClose} width={520}>
       <div className="field">
-        <label>名称</label>
+        <label>{t('名称')}</label>
         <input type="text" value={name} onChange={(event) => setName(event.target.value)} />
       </div>
 
       <div className="field">
-        <label>描述</label>
+        <label>{t('描述')}</label>
         <textarea
           value={description}
-          placeholder="公开分享页会显示这段描述"
+          placeholder={t('公开分享页会显示这段描述')}
           onChange={(event) => setDescription(event.target.value)}
         />
       </div>
 
       <div className="field">
-        <label>自定义图标（可选）</label>
+        <label>{t('自定义图标（可选）')}</label>
         <input
           type="text"
           value={icon}
-          placeholder="图标图片 URL，留空显示颜色圆点"
+          placeholder={t('图标图片 URL，留空显示颜色圆点')}
           onChange={(event) => setIcon(event.target.value)}
         />
       </div>
 
       <div className="field">
-        <label>上级收藏夹</label>
+        <label>{t('上级收藏夹')}</label>
         <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-          <option value="">（顶级）</option>
+          <option value="">{t('（顶级）')}</option>
           {parentOptions.map(({ collection: item, depth }) => (
             <option key={item.id} value={item.id}>
               {'　'.repeat(depth)}
@@ -131,32 +135,32 @@ export default function CollectionDialog({
           checked={isPublic}
           onChange={(event) => setIsPublic(event.target.checked)}
         />
-        公开分享这个收藏夹（包含子收藏夹）
+        {t('公开分享这个收藏夹（包含子收藏夹）')}
       </label>
 
       {isPublic && shareUrl && (
         <div className="field">
-          <label>分享链接</label>
+          <label>{t('分享链接')}</label>
           <div className="share-row">
             <input type="text" readOnly value={shareUrl} />
             <button className="btn small" onClick={() => void copy(shareUrl)}>
-              复制
+              {t('复制')}
             </button>
           </div>
           <div className="share-row" style={{ marginTop: 8 }}>
             <input type="text" readOnly value={feedUrl} />
             <button className="btn small" onClick={() => void copy(feedUrl)}>
-              复制 RSS
+              {t('复制 RSS')}
             </button>
           </div>
           <div className="field-hint">
-            任何人都可以通过这个链接浏览；RSS 可直接添加到阅读器。关闭开关后链接立即失效。
+            {t('任何人都可以通过这个链接浏览；RSS 可直接添加到阅读器。关闭开关后链接立即失效。')}
           </div>
         </div>
       )}
 
       {isPublic && !shareUrl && (
-        <div className="field-hint">保存后会生成分享链接。</div>
+        <div className="field-hint">{t('保存后会生成分享链接。')}</div>
       )}
 
       {error && <div className="field-error">{error}</div>}
@@ -164,15 +168,15 @@ export default function CollectionDialog({
 
       <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
         <button className="btn danger" disabled={busy} onClick={() => void remove()}>
-          删除
+          {t('删除')}
         </button>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn" onClick={onClose} disabled={busy}>
-            关闭
+            {t('关闭')}
           </button>
           <button className="btn primary" disabled={busy} onClick={() => void save()}>
             {busy && <span className="spinner" />}
-            保存
+            {t('保存')}
           </button>
         </div>
       </div>

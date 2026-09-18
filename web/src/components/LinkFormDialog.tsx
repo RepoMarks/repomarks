@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { useI18n } from '../i18n';
 import type { Collection, LinkRecord, MetadataPreview } from '../types';
 import Modal from './Modal';
 import TagInput from './TagInput';
@@ -22,6 +23,7 @@ export default function LinkFormDialog({
   onClose,
   onSaved,
 }: LinkFormDialogProps) {
+  const { t } = useI18n();
   const isEdit = Boolean(initial);
   const [url, setUrl] = useState(initial?.url ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -67,7 +69,7 @@ export default function LinkFormDialog({
 
   const save = async () => {
     if (!url.trim()) {
-      setError('请输入链接地址');
+      setError(t('请输入链接地址'));
       return;
     }
     setSaving(true);
@@ -110,9 +112,9 @@ export default function LinkFormDialog({
   };
 
   return (
-    <Modal title={isEdit ? '编辑链接' : '添加链接'} onClose={onClose} width={620}>
+    <Modal title={isEdit ? t('编辑链接') : t('添加链接')} onClose={onClose} width={620}>
       <div className="field">
-        <label>链接地址</label>
+        <label>{t('链接地址')}</label>
         <input
           type="text"
           value={url}
@@ -128,10 +130,14 @@ export default function LinkFormDialog({
       {!isEdit && metaLoading && (
         <div className="field-hint">
           <span className="spinner" style={{ marginRight: 6 }} />
-          正在抓取页面信息…
+          {t('正在抓取页面信息…')}
         </div>
       )}
-      {!isEdit && metaError && <div className="field-hint">自动抓取失败：{metaError}（仍可手动填写）</div>}
+      {!isEdit && metaError && (
+        <div className="field-hint">
+          {t('自动抓取失败：{msg}（仍可手动填写）', { msg: metaError })}
+        </div>
+      )}
       {!isEdit && meta && (
         <div className="meta-preview">
           {meta.previewImage ? (
@@ -147,55 +153,55 @@ export default function LinkFormDialog({
             <div className="meta-preview placeholder" />
           )}
           <div className="meta-text">
-            <div className="meta-title">{meta.title ?? '未命名页面'}</div>
+            <div className="meta-title">{meta.title ?? t('未命名页面')}</div>
             <div className="meta-desc">{meta.description || meta.resolvedUrl}</div>
           </div>
         </div>
       )}
 
       <div className="field">
-        <label>标题</label>
+        <label>{t('标题')}</label>
         <input type="text" value={title} onChange={(event) => setTitle(event.target.value)} />
       </div>
 
       <div className="field">
-        <label>描述</label>
+        <label>{t('描述')}</label>
         <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
       </div>
 
       <div className="field-row">
         <div className="field">
-          <label>收藏夹</label>
+          <label>{t('收藏夹')}</label>
           <CollectionSelect value={collectionId} onChange={setCollectionId} collections={collections} />
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>标签</label>
+          <label>{t('标签')}</label>
           <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
         </div>
       </div>
 
       <div className="field">
-        <label>备注</label>
+        <label>{t('备注')}</label>
         <textarea
           value={notes}
-          placeholder="自己的笔记、摘录…"
+          placeholder={t('自己的笔记、摘录…')}
           onChange={(event) => setNotes(event.target.value)}
         />
       </div>
 
       <div className="field">
-        <label>自定义图标（可选）</label>
+        <label>{t('自定义图标（可选）')}</label>
         <input
           type="text"
           value={icon}
-          placeholder="留空使用网站 favicon，可填入图标图片 URL"
+          placeholder={t('留空使用网站 favicon，可填入图标图片 URL')}
           onChange={(event) => setIcon(event.target.value)}
         />
       </div>
 
       <label className="checkbox-row">
         <input type="checkbox" checked={pinned} onChange={(event) => setPinned(event.target.checked)} />
-        置顶
+        {t('置顶')}
       </label>
 
       {!isEdit && (
@@ -205,7 +211,7 @@ export default function LinkFormDialog({
             checked={archiveNow}
             onChange={(event) => setArchiveNow(event.target.checked)}
           />
-          保存后立即抓取网页存档
+          {t('保存后立即抓取网页存档')}
         </label>
       )}
 
@@ -213,11 +219,11 @@ export default function LinkFormDialog({
 
       <div className="modal-footer">
         <button className="btn" onClick={onClose} disabled={saving}>
-          取消
+          {t('取消')}
         </button>
         <button className="btn primary" onClick={() => void save()} disabled={saving}>
           {saving && <span className="spinner" />}
-          {isEdit ? '保存修改' : '添加'}
+          {isEdit ? t('保存修改') : t('添加')}
         </button>
       </div>
     </Modal>

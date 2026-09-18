@@ -8,6 +8,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { api } from './api';
+import { useI18n } from './i18n';
 import Sidebar from './components/Sidebar';
 import HomePage from './pages/HomePage';
 import LinkDetailPage from './pages/LinkDetailPage';
@@ -59,6 +60,7 @@ function Layout() {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [session, setSession] = useState<{ enabled: boolean; authenticated: boolean } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const notifyChange = useCallback(() => setRefreshKey((key) => key + 1), []);
@@ -81,7 +83,7 @@ export default function App() {
   }, []);
 
   if (!session) {
-    return <div className="loading-page">加载中…</div>;
+    return <div className="loading-page">{t('加载中…')}</div>;
   }
 
   if (session.enabled && !session.authenticated) {

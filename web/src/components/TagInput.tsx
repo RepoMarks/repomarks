@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useI18n } from '../i18n';
 
 interface TagInputProps {
   value: string[];
@@ -7,6 +8,7 @@ interface TagInputProps {
 }
 
 export default function TagInput({ value, onChange, suggestions = [] }: TagInputProps) {
+  const { t } = useI18n();
   const [input, setInput] = useState('');
 
   const add = (raw: string) => {
@@ -27,7 +29,7 @@ export default function TagInput({ value, onChange, suggestions = [] }: TagInput
       {value.map((tag) => (
         <span className="tag-pill" key={tag}>
           {tag}
-          <button type="button" onClick={() => remove(tag)} title="移除标签">
+          <button type="button" onClick={() => remove(tag)} title={t('移除标签')}>
             ✕
           </button>
         </span>
@@ -35,7 +37,7 @@ export default function TagInput({ value, onChange, suggestions = [] }: TagInput
       <input
         value={input}
         list="repomarks-tag-suggestions"
-        placeholder={value.length === 0 ? '输入标签，回车添加' : ''}
+        placeholder={value.length === 0 ? t('输入标签，回车添加') : ''}
         onChange={(event) => {
           const raw = event.target.value;
           if (raw.endsWith(',') || raw.endsWith('，')) add(raw);

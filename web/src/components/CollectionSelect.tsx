@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import type { Collection } from '../types';
 
 export function collectionOptions(
@@ -25,12 +26,13 @@ export default function CollectionSelect({
   value,
   onChange,
   collections,
-  emptyLabel = '未分类',
+  emptyLabel,
 }: CollectionSelectProps) {
+  const { t } = useI18n();
   const options = collectionOptions(collections);
   return (
     <select value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">{emptyLabel}</option>
+      <option value="">{emptyLabel ?? t('未分类')}</option>
       {options.map(({ collection, depth }) => (
         <option key={collection.id} value={collection.id}>
           {`${'　'.repeat(depth)}${collection.name}`}

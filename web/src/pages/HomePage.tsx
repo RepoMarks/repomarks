@@ -7,18 +7,19 @@ import LinkCard from '../components/LinkCard';
 import LinkFormDialog from '../components/LinkFormDialog';
 import Pager from '../components/Pager';
 import { collectionOptions } from '../components/CollectionSelect';
+import { useI18n } from '../i18n';
 import type { SearchResult } from '../types';
 
-const SORT_OPTIONS = [
-  { value: 'updated:desc', label: '最近更新' },
-  { value: 'updated:asc', label: '最久未更新' },
-  { value: 'created:desc', label: '最近添加' },
-  { value: 'created:asc', label: '最早添加' },
-  { value: 'title:asc', label: '标题 A-Z' },
-  { value: 'title:desc', label: '标题 Z-A' },
-];
-
 export default function HomePage() {
+  const { t } = useI18n();
+  const SORT_OPTIONS = [
+    { value: 'updated:desc', label: t('最近更新') },
+    { value: 'updated:asc', label: t('最久未更新') },
+    { value: 'created:desc', label: t('最近添加') },
+    { value: 'created:asc', label: t('最早添加') },
+    { value: 'title:asc', label: t('标题 A-Z') },
+    { value: 'title:desc', label: t('标题 Z-A') },
+  ];
   const openMenu = useMenu();
   const { refreshKey, notifyChange } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,13 +52,13 @@ export default function HomePage() {
     new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.onerror = () => reject(new Error(t('读取文件失败')));
       reader.readAsDataURL(file);
     });
 
   const uploadFile = async (file: File) => {
     if (file.size > 25 * 1024 * 1024) {
-      window.alert('文件不能超过 25MB');
+      window.alert(t('文件不能超过 {size}MB', { size: 25 }));
       return;
     }
     try {
@@ -157,7 +158,10 @@ export default function HomePage() {
     payload: { tags?: string[]; collectionId?: string | null } = {}
   ) => {
     if (selected.size === 0) return;
-    if (action === 'delete' && !window.confirm(`确定删除选中的 ${selected.size} 条链接吗？`)) {
+    if (
+      action === 'delete' &&
+      !window.confirm(t('确定删除选中的 {count} 条链接吗？', { count: selected.size }))
+    ) {
       return;
     }
     try {
@@ -171,7 +175,9 @@ export default function HomePage() {
   };
 
   const promptTags = (action: 'addTags' | 'removeTags') => {
-    const input = window.prompt(action === 'addTags' ? '要添加的标签（逗号分隔）' : '要移除的标签（逗号分隔）');
+    const input = window.prompt(
+      action === 'addTags' ? t('要添加的标签（逗号分隔）') : t('要移除的标签（逗号分隔）')
+    );
     if (!input) return;
     const tags = input
       .split(/[,，]/)
@@ -183,13 +189,13 @@ export default function HomePage() {
   return (
     <>
       <div className="topbar">
-        <button className="icon-btn menu-btn" onClick={openMenu} title="菜单">
+        <button className="icon-btn menu-btn" onClick={openMenu} title={t('菜单')}>
           ☰
         </button>
         <div className="search-box">
           <input
             value={searchInput}
-            placeholder="搜索标题、网址、描述、标签…"
+            placeholder={t('搜索标题、网址、描述、标签…')}
             onChange={(event) => setSearchInput(event.target.value)}
           />
           {loading && <span className="spinner" />}
@@ -215,23 +221,23 @@ export default function HomePage() {
         </select>
         <button
           className="btn ghost"
-          title="切换视图"
+          title={t('切换视图')}
           onClick={() => setParam({ view: view === 'grid' ? 'list' : 'grid' })}
         >
-          {view === 'grid' ? '列表视图' : '网格视图'}
+          {view === 'grid' ? t('列表视图') : t('网格视图')}
         </button>
         <button
           className="btn ghost"
           onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
         >
-          {selectMode ? '退出选择' : '选择'}
+          {selectMode ? t('退出选择') : t('选择')}
         </button>
         <button
           className="btn ghost"
-          title="上传图片 / PDF / HTML"
+          title="PNG / PDF / HTML"
           onClick={() => uploadInput.current?.click()}
         >
-          上传文件
+          {t('上传文件')}
         </button>
         <input
           ref={uploadInput}
@@ -245,35 +251,35 @@ export default function HomePage() {
           }}
         />
         <button className="btn primary" onClick={() => setShowAdd(true)}>
-          添加链接
+          {t('添加链接')}
         </button>
       </div>
 
       <div className="content">
         {selectMode && (
           <div className="bulk-bar">
-            <span className="bulk-count">已选 {selected.size} 条</span>
+            <span className="bulk-count">{t('已选 {count} 条', { count: selected.size })}</span>
             <button
               className="btn small"
               onClick={() =>
                 setSelected(new Set((data?.items ?? []).map((item) => item.id)))
               }
             >
-              全选本页
+              {t('全选本页')}
             </button>
             <button
               className="btn small"
               disabled={selected.size === 0}
               onClick={() => promptTags('addTags')}
             >
-              添加标签
+              {t('添加标签')}
             </button>
             <button
               className="btn small"
               disabled={selected.size === 0}
               onClick={() => promptTags('removeTags')}
             >
-              移除标签
+              {t('移除标签')}
             </button>
             <select
               className="bulk-select"
@@ -287,8 +293,8 @@ export default function HomePage() {
                 });
               }}
             >
-              <option value="">移动到收藏夹…</option>
-              <option value="__none__">未分类</option>
+              <option value="">{t('移动到收藏夹…')}</option>
+              <option value="__none__">{t('未分类')}</option>
               {collectionOptions(collections).map(({ collection, depth }) => (
                 <option key={collection.id} value={collection.id}>
                   {'　'.repeat(depth)}
@@ -301,39 +307,39 @@ export default function HomePage() {
               disabled={selected.size === 0}
               onClick={() => void runBulk('pin')}
             >
-              置顶
+              {t('置顶')}
             </button>
             <button
               className="btn small"
               disabled={selected.size === 0}
               onClick={() => void runBulk('unpin')}
             >
-              取消置顶
+              {t('取消置顶')}
             </button>
             <button
               className="btn small"
               disabled={selected.size === 0}
               onClick={() => void runBulk('archive')}
             >
-              抓取存档
+              {t('抓取存档')}
             </button>
             <button
               className="btn small danger"
               disabled={selected.size === 0}
               onClick={() => void runBulk('delete')}
             >
-              删除
+              {t('删除')}
             </button>
           </div>
         )}
         {hasFilter && (
           <div className="field-hint" style={{ marginBottom: 12 }}>
-            当前筛选：
-            {q && ` 搜索「${q}」`}
-            {activeCollection && ` 收藏夹「${activeCollection.name}」`}
-            {collectionId === '__none__' && ' 未分类'}
-            {tag && ` 标签「${tag}」`}
-            {archived === 'true' && ' 已存档'}
+            {t('当前筛选：')}
+            {q && ` ${t('搜索「{q}」', { q })}`}
+            {activeCollection && ` ${t('收藏夹「{name}」', { name: activeCollection.name })}`}
+            {collectionId === '__none__' && ` ${t('未分类')}`}
+            {tag && ` ${t('标签「{tag}」', { tag })}`}
+            {archived === 'true' && ` ${t('已存档')}`}
             <button
               className="icon-btn"
               style={{ marginLeft: 8 }}
@@ -342,7 +348,7 @@ export default function HomePage() {
                 setSearchParams('', { replace: true });
               }}
             >
-              清除
+              {t('清除')}
             </button>
           </div>
         )}
@@ -351,14 +357,14 @@ export default function HomePage() {
 
         {data && data.items.length === 0 && !loading ? (
           <div className="empty">
-            <h3>{hasFilter ? '没有匹配的链接' : '还没有链接'}</h3>
+            <h3>{hasFilter ? t('没有匹配的链接') : t('还没有链接')}</h3>
             <p>
               {hasFilter
-                ? '试试调整关键词或筛选条件。'
-                : '添加第一条链接，数据会自动提交到你的 Git 仓库。'}
+                ? t('试试调整关键词或筛选条件。')
+                : t('添加第一条链接，数据会自动提交到你的 Git 仓库。')}
             </p>
             <button className="btn primary" onClick={() => setShowAdd(true)}>
-              添加链接
+              {t('添加链接')}
             </button>
           </div>
         ) : (

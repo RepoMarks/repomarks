@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useApp, useMenu } from '../App';
 import { useCollections } from '../hooks';
+import { useI18n } from '../i18n';
 import CollectionSelect from '../components/CollectionSelect';
 import type { ImportSummary } from '../types';
 
 export default function ImportPage() {
+  const { t } = useI18n();
   const openMenu = useMenu();
   const { refreshKey, notifyChange } = useApp();
   const collections = useCollections(refreshKey);
@@ -27,7 +29,7 @@ export default function ImportPage() {
       const kind: 'html' | 'json' = /\.json$/i.test(selected.name) ? 'json' : 'html';
       setFile({ name: selected.name, text, kind });
     } catch (err) {
-      setError(`读取文件失败：${(err as Error).message}`);
+      setError(t('读取文件失败：{msg}', { msg: (err as Error).message }));
     }
   };
 
@@ -64,15 +66,16 @@ export default function ImportPage() {
         <button className="icon-btn menu-btn" onClick={openMenu}>
           ☰
         </button>
-        <h2 style={{ margin: 0, fontSize: 16 }}>导入书签</h2>
+        <h2 style={{ margin: 0, fontSize: 16 }}>{t('导入书签')}</h2>
       </div>
 
       <div className="content">
         <div className="page-narrow">
           <div className="panel">
             <p style={{ marginTop: 0, color: 'var(--muted)' }}>
-              支持浏览器导出的书签 HTML 文件（Chrome / Edge / Firefox），以及 JSON
-              格式（如 Linkwarden 导出）。书签目录会转换为收藏夹，重复链接会自动跳过。
+              {t(
+                '支持浏览器导出的书签 HTML 文件（Chrome / Edge / Firefox），以及 JSON 格式（如 Linkwarden 导出）。书签目录会转换为收藏夹，重复链接会自动跳过。'
+              )}
             </p>
 
             <div
@@ -88,10 +91,12 @@ export default function ImportPage() {
               {file ? (
                 <div>
                   <strong>{file.name}</strong>
-                  <div className="field-hint">{(file.text.length / 1024).toFixed(1)} KB，点击更换文件</div>
+                  <div className="field-hint">
+                    {t('{size} KB，点击更换文件', { size: (file.text.length / 1024).toFixed(1) })}
+                  </div>
                 </div>
               ) : (
-                <div>点击选择文件，或拖拽到这里</div>
+                <div>{t('点击选择文件，或拖拽到这里')}</div>
               )}
               <input
                 ref={fileInput}
@@ -107,7 +112,7 @@ export default function ImportPage() {
             </div>
 
             <div className="field" style={{ marginTop: 14, maxWidth: 320 }}>
-              <label>默认收藏夹（用于无目录的书签）</label>
+              <label>{t('默认收藏夹（用于无目录的书签）')}</label>
               <CollectionSelect
                 value={defaultCollectionId}
                 onChange={setDefaultCollectionId}
@@ -118,24 +123,27 @@ export default function ImportPage() {
             {error && <div className="field-error" style={{ marginTop: 10 }}>{error}</div>}
             {result && (
               <div className="result-box" style={{ marginTop: 10 }}>
-                导入完成：新增 {result.linksAdded} 条链接，跳过 {result.linksSkipped} 条重复，
-                新建 {result.collectionsCreated} 个收藏夹。
+                {t('导入完成：新增 {added} 条链接，跳过 {skipped} 条重复，新建 {collections} 个收藏夹。', {
+                  added: result.linksAdded,
+                  skipped: result.linksSkipped,
+                  collections: result.collectionsCreated,
+                })}
               </div>
             )}
 
             <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
               <button className="btn primary" disabled={!file || importing} onClick={() => void startImport()}>
                 {importing && <span className="spinner" />}
-                开始导入
+                {importing ? t('导入中…') : t('开始导入')}
               </button>
               <Link className="btn ghost" to="/settings">
-                导出数据
+                {t('导出数据')}
               </Link>
             </div>
           </div>
 
           <div className="panel">
-            <h3>JSON 格式说明</h3>
+            <h3>{t('JSON 格式说明')}</h3>
             <pre
               style={{
                 margin: 0,

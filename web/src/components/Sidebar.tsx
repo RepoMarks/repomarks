@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../App';
 import { useCollections, useStatus, useTags } from '../hooks';
+import { useI18n } from '../i18n';
 import { useThemeMode, type ThemeMode } from '../theme';
 import CollectionDialog from './CollectionDialog';
 import type { Collection } from '../types';
@@ -17,6 +18,12 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   dark: '深色主题',
   light: '浅色主题',
   system: '跟随系统',
+};
+
+const THEME_DOTS: Record<ThemeMode, string> = {
+  dark: '#5b8def',
+  light: '#e8a33d',
+  system: '#9b6ee0',
 };
 
 function CollectionTree({
@@ -34,6 +41,7 @@ function CollectionTree({
   onSelect: (id: string) => void;
   onEdit: (collection: Collection) => void;
 }) {
+  const { t } = useI18n();
   return (
     <>
       {collections
@@ -70,7 +78,7 @@ function CollectionTree({
               </button>
               <button
                 className="icon-btn collection-edit"
-                title="收藏夹设置"
+                title={t('收藏夹设置')}
                 onClick={() => onEdit(collection)}
               >
                 ✎
@@ -102,6 +110,7 @@ export default function Sidebar({ open }: { open: boolean }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Collection | null>(null);
   const [themeMode, setThemeMode] = useThemeMode();
+  const { lang, setLang, t } = useI18n();
 
   const collectionId = params.get('collection') ?? '';
   const tag = params.get('tag') ?? '';
@@ -139,12 +148,19 @@ export default function Sidebar({ open }: { open: boolean }) {
   };
 
   const syncLabel = (() => {
-    if (!status) return '状态加载中…';
-    if (status.sync.syncing) return '正在同步…';
-    if (status.sync.lastError) return `同步失败：${status.sync.lastError.slice(0, 40)}`;
-    if (status.sync.pendingPush) return '有待推送的本地提交';
-    if (status.sync.lastSyncAt) return `已同步 ${new Date(status.sync.lastSyncAt).toLocaleTimeString('zh-CN', { hour12: false })}`;
-    return '尚未同步';
+    if (!status) return t('状态加载中…');
+    if (status.sync.syncing) return t('正在同步…');
+    if (status.sync.lastError) {
+      return t('同步失败：{msg}', { msg: status.sync.lastError.slice(0, 40) });
+    }
+    if (status.sync.pendingPush) return t('有待推送的本地提交');
+    if (status.sync.lastSyncAt) {
+      const locale = lang === 'zh' ? 'zh-CN' : 'en-US';
+      return t('已同步 {time}', {
+        time: new Date(status.sync.lastSyncAt).toLocaleTimeString(locale, { hour12: false }),
+      });
+    }
+    return t('尚未同步');
   })();
 
   const syncDot = !status
@@ -161,7 +177,7 @@ export default function Sidebar({ open }: { open: boolean }) {
         <div className="brand-mark">G</div>
         <div>
           <div className="brand-name">RepoMarks</div>
-          <div className="brand-sub">数据存于 Git 仓库</div>
+          <div className="brand-sub">{t('数据存于 Git 仓库')}</div>
         </div>
       </div>
 
@@ -172,7 +188,7 @@ export default function Sidebar({ open }: { open: boolean }) {
             onClick={() => apply({})}
           >
             <span className="nav-dot" style={{ background: '#5b8def' }} />
-            全部链接
+            {t('全部链接')}
             <span className="count">{status?.stats.links ?? ''}</span>
           </button>
           <button
@@ -180,7 +196,7 @@ export default function Sidebar({ open }: { open: boolean }) {
             onClick={() => apply({ collection: '__none__' })}
           >
             <span className="nav-dot" style={{ background: '#7a8b3f' }} />
-            未分类
+            {t('未分类')}
             <span className="count">{status?.stats.uncategorized ?? ''}</span>
           </button>
           <button
@@ -188,17 +204,17 @@ export default function Sidebar({ open }: { open: boolean }) {
             onClick={() => apply({ archived: archived === 'true' ? undefined : 'true' })}
           >
             <span className="nav-dot" style={{ background: '#34b27b' }} />
-            已存档
+            {t('已存档')}
             <span className="count">{status?.stats.archived ?? ''}</span>
           </button>
         </nav>
 
         <section className="nav-group">
           <div className="nav-group-title">
-            <span>收藏夹</span>
+            <span>{t('收藏夹')}</span>
             <button
               className="icon-btn"
-              title="新建收藏夹"
+              title={t('新建收藏夹')}
               onClick={() => setCreating((value) => !value)}
             >
               ＋
@@ -210,7 +226,7 @@ export default function Sidebar({ open }: { open: boolean }) {
                 type="text"
                 autoFocus
                 value={newName}
-                placeholder="名称"
+                placeholder={t('名称')}
                 style={{
                   flex: 1,
                   background: 'var(--panel-2)',
@@ -226,7 +242,7 @@ export default function Sidebar({ open }: { open: boolean }) {
                 }}
               />
               <button className="btn small" onClick={() => void createCollection()}>
-                建
+                {t('建')}
               </button>
             </div>
           )}
@@ -240,7 +256,7 @@ export default function Sidebar({ open }: { open: boolean }) {
           />
           {collections.length === 0 && !creating && (
             <div className="field-hint" style={{ padding: '2px 10px' }}>
-              暂无收藏夹
+              {t('暂无收藏夹')}
             </div>
           )}
         </section>
@@ -248,7 +264,7 @@ export default function Sidebar({ open }: { open: boolean }) {
         {tags.length > 0 && (
           <section className="nav-group">
             <div className="nav-group-title">
-              <span>标签</span>
+              <span>{t('标签')}</span>
             </div>
             <div className="tag-cloud">
               {tags.slice(0, 30).map((item) => (
@@ -279,7 +295,7 @@ export default function Sidebar({ open }: { open: boolean }) {
           style={location.pathname === '/import' ? { background: 'var(--accent-soft)' } : undefined}
         >
           <span className="nav-dot" style={{ background: '#9b6ee0' }} />
-          导入书签
+          {t('导入书签')}
         </button>
         <button
           className="nav-item"
@@ -287,17 +303,18 @@ export default function Sidebar({ open }: { open: boolean }) {
           style={location.pathname === '/settings' ? { background: 'var(--accent-soft)' } : undefined}
         >
           <span className="nav-dot" style={{ background: '#29a4b8' }} />
-          仓库与状态
+          {t('仓库与状态')}
         </button>
         <button className="nav-item" onClick={() => setThemeMode(nextTheme(themeMode))}>
-          <span
-            className="nav-dot"
-            style={{
-              background:
-                themeMode === 'dark' ? '#5b8def' : themeMode === 'light' ? '#e8a33d' : '#9b6ee0',
-            }}
-          />
-          {THEME_LABELS[themeMode]}
+          <span className="nav-dot" style={{ background: THEME_DOTS[themeMode] }} />
+          {t(THEME_LABELS[themeMode])}
+        </button>
+        <button
+          className="nav-item"
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+        >
+          <span className="nav-dot" style={{ background: '#4f9e8f' }} />
+          {lang === 'zh' ? 'English' : '中文'}
         </button>
         <button
           className="nav-item"
@@ -307,7 +324,7 @@ export default function Sidebar({ open }: { open: boolean }) {
           }}
         >
           <span className="nav-dot" style={{ background: '#e05666' }} />
-          退出登录
+          {t('退出登录')}
         </button>
       </div>
 

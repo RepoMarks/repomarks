@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, faviconSrc, fileUrl, formatBytes, hostnameOf } from '../api';
+import { useI18n } from '../i18n';
 import type { Collection, LinkRecord } from '../types';
 
 interface LinkCardProps {
@@ -13,24 +14,28 @@ interface LinkCardProps {
 }
 
 function ArchiveBadge({ link }: { link: LinkRecord }) {
+  const { t } = useI18n();
   if (link.archiveStatus === 'pending') {
     return (
       <span className="badge pending">
-        <span className="spinner" style={{ marginRight: 5 }} /> 存档中
+        <span className="spinner" style={{ marginRight: 5 }} /> {t('存档中')}
       </span>
     );
   }
   if (link.archiveStatus === 'failed') {
     return (
       <span className="badge failed" title={link.archiveError ?? ''}>
-        存档失败
+        {t('存档失败')}
       </span>
     );
   }
   if (link.archivedAt) {
     return (
-      <span className="badge ok" title={`${link.archiveEngine ?? ''} 存档，${formatBytes(link.archiveSize)}`}>
-        已存档
+      <span
+        className="badge ok"
+        title={`${link.archiveEngine ?? ''} ${formatBytes(link.archiveSize)}`}
+      >
+        {t('已存档')}
       </span>
     );
   }
@@ -45,6 +50,7 @@ export default function LinkCard({
   selected = false,
   onSelectToggle,
 }: LinkCardProps) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const collection = collections.find((item) => item.id === link.collectionId);
   const icon = faviconSrc(link);
@@ -62,7 +68,7 @@ export default function LinkCard({
   };
 
   const remove = async () => {
-    if (!window.confirm(`确定删除「${link.title}」吗？`)) return;
+    if (!window.confirm(t('确定删除「{title}」吗？', { title: link.title }))) return;
     setBusy(true);
     try {
       await api.deleteLink(link.id);
@@ -77,7 +83,7 @@ export default function LinkCard({
   return (
     <article className={`card ${selected ? 'selected' : ''}`}>
       {selectable && (
-        <label className="card-check" title="选择">
+        <label className="card-check" title={t('选择')}>
           <input
             type="checkbox"
             checked={selected}
@@ -115,10 +121,10 @@ export default function LinkCard({
             )}
             <span className="site-name">
               {collection ? `${collection.name} · ` : ''}
-              {link.kind === 'file' ? '本地文件' : hostnameOf(link.url)}
+              {link.kind === 'file' ? t('本地文件') : hostnameOf(link.url)}
             </span>
             {link.pinned && (
-              <span className="pin-mark" title="已置顶">
+              <span className="pin-mark" title={t('已置顶')}>
                 ★
               </span>
             )}
@@ -145,21 +151,21 @@ export default function LinkCard({
           target="_blank"
           rel="noreferrer noopener"
         >
-          打开
+          {t('打开')}
         </a>
         <Link className="icon-btn" to={`/links/${link.id}`}>
-          详情
+          {t('详情')}
         </Link>
         <button
           className="icon-btn"
           onClick={archive}
           disabled={busy || link.archiveStatus === 'pending'}
-          title={link.archivedAt ? '重新抓取网页存档' : '抓取网页存档'}
+          title={link.archivedAt ? t('重新抓取网页存档') : t('抓取网页存档')}
         >
-          {link.archivedAt ? '重新存档' : '存档'}
+          {link.archivedAt ? t('重新存档') : t('存档')}
         </button>
         <button className="icon-btn danger" onClick={remove} disabled={busy}>
-          删除
+          {t('删除')}
         </button>
       </div>
     </article>

@@ -1,3 +1,4 @@
+import { translate, type Lang } from './i18n';
 import type {
   Collection,
   ImportSummary,
@@ -7,6 +8,10 @@ import type {
   StatusResponse,
   TagCount,
 } from './types';
+
+function lang(): Lang {
+  return document.documentElement.lang === 'en' ? 'en' : 'zh';
+}
 
 export class ApiError extends Error {
   constructor(
@@ -32,11 +37,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       },
     });
   } catch (err) {
-    throw new ApiError(0, `网络错误: ${(err as Error).message}`);
+    throw new ApiError(0, translate(lang(), '网络错误: {msg}', { msg: (err as Error).message }));
   }
   if (res.status === 401) {
     window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-    throw new ApiError(401, '未登录');
+    throw new ApiError(401, translate(lang(), '未登录'));
   }
   const text = await res.text();
   let data: unknown = null;
@@ -241,5 +246,6 @@ export function formatDate(value: string | null | undefined): string {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('zh-CN', { hour12: false });
+  const locale = document.documentElement.lang === 'en' ? 'en-US' : 'zh-CN';
+  return date.toLocaleString(locale, { hour12: false });
 }

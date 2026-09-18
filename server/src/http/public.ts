@@ -16,6 +16,40 @@ function baseUrl(req: Request): string {
   return `${req.protocol}://${host}`;
 }
 
+type Lang = 'zh' | 'en';
+
+const PT: Record<Lang, Record<string, string>> = {
+  zh: {
+    links: '条链接',
+    rss: 'RSS 订阅',
+    poweredBy: '由 RepoMarks 驱动',
+    footer: '此页面为公开分享，数据来自分享者的 Git 仓库。',
+    archive: '存档',
+    reader: '阅读版',
+    screenshot: '截图',
+    pdf: 'PDF',
+  },
+  en: {
+    links: 'links',
+    rss: 'RSS feed',
+    poweredBy: 'Powered by RepoMarks',
+    footer: "This is a public share page. The data comes from the owner's Git repository.",
+    archive: 'Archive',
+    reader: 'Reader',
+    screenshot: 'Screenshot',
+    pdf: 'PDF',
+  },
+};
+
+function pickLang(req: Request): Lang {
+  const best = req.acceptsLanguages(['zh', 'en']);
+  return typeof best === 'string' && best.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function pt(lang: Lang, key: string): string {
+  return PT[lang][key] ?? key;
+}
+
 function hostnameOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -51,6 +85,7 @@ const PAGE_STYLE = `
 `;
 
 function renderPage(
+  lang: Lang,
   origin: string,
   collection: { name: string; slug?: string; description?: string },
   links: Array<{
@@ -74,10 +109,10 @@ function renderPage(
       const formatLinks: string[] = [];
       const formatUrl = (format: string): string =>
         `${origin}/share/${slug}/links/${link.id}/archive?format=${format}`;
-      if (link.archivePath) formatLinks.push(`<a href="${formatUrl('html')}" target="_blank" rel="noreferrer">存档</a>`);
-      if (link.readablePath) formatLinks.push(`<a href="${formatUrl('readable')}" target="_blank" rel="noreferrer">阅读版</a>`);
-      if (link.screenshotPath) formatLinks.push(`<a href="${formatUrl('screenshot')}" target="_blank" rel="noreferrer">截图</a>`);
-      if (link.pdfPath) formatLinks.push(`<a href="${formatUrl('pdf')}" target="_blank" rel="noreferrer">PDF</a>`);
+      if (link.archivePath) formatLinks.push(`<a href="${formatUrl('html')}" target="_blank" rel="noreferrer">${pt(lang, 'archive')}</a>`);
+      if (link.readablePath) formatLinks.push(`<a href="${formatUrl('readable')}" target="_blank" rel="noreferrer">${pt(lang, 'reader')}</a>`);
+      if (link.screenshotPath) formatLinks.push(`<a href="${formatUrl('screenshot')}" target="_blank" rel="noreferrer">${pt(lang, 'screenshot')}</a>`);
+      if (link.pdfPath) formatLinks.push(`<a href="${formatUrl('pdf')}" target="_blank" rel="noreferrer">${pt(lang, 'pdf')}</a>`);
       if (link.waybackUrl) formatLinks.push(`<a href="${escapeHtml(link.waybackUrl)}" target="_blank" rel="noreferrer">Wayback</a>`);
       const tags = link.tags.map((tag) => `#${escapeHtml(tag)}`).join(' ');
       return `      <li class="item">
@@ -94,7 +129,7 @@ function renderPage(
     .join('\n');
 
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${lang === 'zh' ? 'zh-CN' : 'en'}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -108,12 +143,12 @@ function renderPage(
     <header>
       <h1>${escapeHtml(collection.name)}</h1>
       ${collection.description ? `<p>${escapeHtml(collection.description)}</p>` : ''}
-      <p>${total} 条链接 · <a href="${origin}/share/${slug}/feed.xml">RSS 订阅</a> · 由 RepoMarks 驱动</p>
+      <p>${total} ${pt(lang, 'links')} · <a href="${origin}/share/${slug}/feed.xml">${pt(lang, 'rss')}</a> · ${pt(lang, 'poweredBy')}</p>
     </header>
     <ul class="items">
 ${items}
     </ul>
-    <footer>此页面为公开分享，数据来自分享者的 Git 仓库。</footer>
+    <footer>${pt(lang, 'footer')}</footer>
   </div>
 </body>
 </html>`;
@@ -135,7 +170,9 @@ export function createPublicRouter(service: DataService): Router {
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('cache-control', 'no-cache');
-      res.send(renderPage(origin, result.collection, result.links, result.links.length));
+      res.send(
+        renderPage(pickLang(req), origin, result.collection, result.links, result.links.length)
+      );
     })
   );
 
