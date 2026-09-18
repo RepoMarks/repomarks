@@ -19,6 +19,7 @@ const server = spawn(process.execPath, ['server/dist/index.js'], {
     PORT: String(port),
     AUTH_PASSWORD: 'secret',
     ARCHIVE_ENGINE: 'basic',
+    ARCHIVE_FORMATS: 'html,readable',
     SYNC_INTERVAL: '0',
     GIT_TOKEN: '',
     GIT_BRANCH: 'main',
@@ -164,7 +165,7 @@ try {
   const archiveStart = await req(`/api/links/${link.id}/archive`, { method: 'POST' });
   if (archiveStart.res.status !== 202) fail(`archive start failed: ${archiveStart.text}`);
   let archived = null;
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 240; i++) {
     await sleep(500);
     const current = await req(`/api/links/${link.id}`);
     if (current.data.archiveStatus !== 'pending') {

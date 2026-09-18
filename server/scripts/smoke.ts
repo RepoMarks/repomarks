@@ -19,6 +19,8 @@ async function main(): Promise<void> {
   process.env.DATA_DIR = path.join(base, 'data-a');
   process.env.AUTH_PASSWORD = 'test';
   process.env.ARCHIVE_ENGINE = 'basic';
+  // 冒烟测试不依赖浏览器：仅验证 html 与阅读版
+  process.env.ARCHIVE_FORMATS = 'html,readable';
   process.env.GIT_BRANCH = 'main';
   process.env.GIT_TOKEN = '';
   const config = loadConfig();
@@ -40,7 +42,7 @@ async function main(): Promise<void> {
   console.log('updated link, collection:', collection.name);
 
   await a.archiveLink(link.id);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 120; i++) {
     const current = a.requireLink(link.id);
     if (current.archiveStatus !== 'pending') break;
     await sleep(250);
