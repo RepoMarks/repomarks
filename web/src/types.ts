@@ -118,7 +118,12 @@ export interface StatusResponse {
     reason?: string;
     formats: string[];
   };
-  ai: { enabled: boolean; model: string | null };
+  ai: {
+    enabled: boolean;
+    model: string | null;
+    embeddingModel: string | null;
+    embedded: number;
+  };
   stats: {
     links: number;
     archived: number;

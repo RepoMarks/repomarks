@@ -9,6 +9,30 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'repomarks-http-'));
 const remote = path.join(base, 'remote.git');
 execFileSync('git', ['init', '--bare', '-b', 'main', remote]);
 
+const aiServer = http.createServer((request, response) => {
+  let body = '';
+  request.on('data', (chunk) => (body += chunk));
+  request.on('end', () => {
+    response.setHeader('content-type', 'application/json');
+    if (request.url.includes('/embeddings')) {
+      const parsed = JSON.parse(body || '{}');
+      const inputs = Array.isArray(parsed.input) ? parsed.input : [parsed.input ?? ''];
+      const data = inputs.map((text) => {
+        const vector = new Array(8).fill(0);
+        for (let index = 0; index < String(text).length; index++) {
+          vector[index % 8] += 1;
+        }
+        return { embedding: vector };
+      });
+      response.end(JSON.stringify({ data }));
+      return;
+    }
+    response.end(JSON.stringify({ choices: [{ message: { content: 'Smoke answer.' } }] }));
+  });
+});
+await new Promise((resolve) => aiServer.listen(0, '127.0.0.1', resolve));
+const aiPort = aiServer.address().port;
+
 const port = Number(process.env.SMOKE_PORT ?? 3126);
 const baseUrl = `http://127.0.0.1:${port}`;
 const server = spawn(process.execPath, ['server/dist/index.js'], {
@@ -23,6 +47,9 @@ const server = spawn(process.execPath, ['server/dist/index.js'], {
     ARCHIVE_FORMATS: 'html,readable',
     SYNC_INTERVAL: '0',
     ALLOW_PRIVATE_URLS: 'true',
+    AI_BASE_URL: `http://127.0.0.1:${aiPort}/v1`,
+    AI_MODEL: 'smoke-model',
+    AI_EMBEDDING_MODEL: 'smoke-embed',
     GIT_TOKEN: '',
     GIT_BRANCH: 'main',
   },
@@ -518,6 +545,29 @@ try {
   const v1Deleted = await req(`/api/v1/links/${v1Created.data.id}`, { method: 'DELETE' });
   if (!v1Deleted.data.success) fail('v1 delete failed');
   console.log('16r. Linkwarden-compatible v1 API ok');
+
+  const embed = await req('/api/ai/embed', {
+    method: 'POST',
+    body: JSON.stringify({ limit: 20 }),
+  });
+  if (embed.res.status !== 200 || embed.data.embedded < 1) {
+    fail(`ai embed failed: ${embed.text}`);
+  }
+  const semantic = await req('/api/ai/search', {
+    method: 'POST',
+    body: JSON.stringify({ q: 'example domain', topK: 5 }),
+  });
+  if (semantic.res.status !== 200 || semantic.data.results.length < 1) {
+    fail(`ai semantic search failed: ${semantic.text}`);
+  }
+  const chat = await req('/api/ai/chat', {
+    method: 'POST',
+    body: JSON.stringify({ question: 'What did I save about domains?' }),
+  });
+  if (chat.res.status !== 200 || !chat.data.answer || chat.data.sources.length < 1) {
+    fail(`ai chat failed: ${chat.text}`);
+  }
+  console.log('16s. AI semantic search + chat ok');
   } finally {
     feedServer.close();
   }
@@ -537,6 +587,7 @@ try {
   process.exitCode = 1;
 } finally {
   server.kill();
+  aiServer.close();
   await sleep(300);
   fs.rmSync(base, { recursive: true, force: true });
 }

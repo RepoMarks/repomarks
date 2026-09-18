@@ -19,7 +19,12 @@ The service clones your data repository locally, reads and writes plain files, a
 - Upload images / PDFs / HTML files as bookmarks, and attach your own SingleFile / PDF / screenshot files to existing links
 - Import browser bookmarks (Netscape HTML from Chrome / Edge / Firefox) and JSON exports (including Linkwarden); folders become collections and duplicate URLs are skipped
 - Export everything as JSON; all data files are human-readable and can be edited by hand before `git push`
-- Optional AI tagging: suggest tags and a one-sentence summary through any OpenAI-compatible API (local Ollama or a hosted provider), then apply with one click
+- Tag manager (rename / merge / delete), dead-link checker with `is:dead`, read-later queue (`is:unread`), duplicate-link merge, Markdown export and generated `index/*.md` collection indexes
+- Full-text search inside preserved pages (index committed to the repo), plus advanced query syntax (`site:`, `after:`, `before:`, `is:pinned`, `is:dead`, `is:failed`, `is:archived`, `is:read`, `is:unread`)
+- Encrypted public shares (password + expiry) and RSS feeds mirrored from external sources into a collection
+- Linkwarden-compatible `/api/v1` endpoints for Floccus and other clients, browser extension with side panel and "save selection as highlight"
+- `BASE_PATH` support for reverse-proxy sub-paths
+- Optional AI: tag/summary suggestions, semantic search and "Ask AI" chat over your preserved pages (OpenAI-compatible APIs such as Ollama)
 - Single-user password authentication, plus API keys for the bundled browser extension and other third-party clients
 - Public collection sharing with a read-only page and RSS feed
 - Bulk actions (tags, collection, pin, preserve, delete), highlights and annotations in the reader view
@@ -213,7 +218,12 @@ node scripts/migrate-to-lfs.mjs ./data --push   # force-push the rewritten histo
 | `AI_BASE_URL` | - | OpenAI-compatible API base URL (e.g. `https://api.openai.com/v1`); leave empty to disable AI features |
 | `AI_API_KEY` | - | API key for the AI provider (optional for local Ollama) |
 | `AI_MODEL` | - | Model name, e.g. `gpt-4o-mini` or `llama3.1` |
+| `AI_EMBEDDING_MODEL` | - | Embedding model for semantic search, e.g. `text-embedding-3-small` or `nomic-embed-text` |
 | `AI_TIMEOUT` | `30000` | AI request timeout in milliseconds |
+| `BASE_PATH` | - | Serve under a sub-path, e.g. `/repomarks` (also build the web app with `VITE_BASE_PATH`) |
+| `REFRESH_ARCHIVE_DAYS` / `REFRESH_ARCHIVE_LIMIT` | `0` / `5` | Re-preserve snapshots older than N days, at most M per run |
+| `FEED_SYNC_INTERVAL_HOURS` | `0` | Sync collection RSS feeds every N hours (0 = manual only) |
+| `FULLTEXT_INDEX` / `FULLTEXT_MAX_CHARS` | `true` / `2000` | Index preserved text for full-text search and the per-link character budget |
 | `ALLOW_PRIVATE_URLS` | `false` | Allow fetching private/internal addresses (disabled to prevent SSRF) |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | `RepoMarks` / `repomarks@localhost` | Commit author for data repository commits |
 

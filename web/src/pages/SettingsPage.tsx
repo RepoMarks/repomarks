@@ -318,6 +318,34 @@ export default function SettingsPage() {
                   ? t('已启用（模型 {model}）', { model: status.ai.model ?? '' })
                   : t('未配置')}
               </dd>
+              <dt>{t('语义向量模型')}</dt>
+              <dd>{status.ai.embeddingModel ?? '-'}</dd>
+              <dt>{t('语义索引')}</dt>
+              <dd>
+                {t('已嵌入 {count} 条链接', { count: status.ai.embedded })}
+                <button
+                  className="btn small"
+                  style={{ marginLeft: 10 }}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const result = await api.aiEmbed(100);
+                        setMessage(
+                          t('已嵌入 {count} 条链接，剩余 {remaining} 条', {
+                            count: result.embedded,
+                            remaining: result.remaining,
+                          })
+                        );
+                        notifyChange();
+                      } catch (err) {
+                        window.alert((err as Error).message);
+                      }
+                    })();
+                  }}
+                >
+                  {t('重建语义索引')}
+                </button>
+              </dd>
             </dl>
             {!status.ai.enabled && (
               <div className="field-hint" style={{ marginTop: 10 }}>

@@ -6,6 +6,7 @@ import { useCollections, useTags } from '../hooks';
 import LinkCard from '../components/LinkCard';
 import LinkFormDialog from '../components/LinkFormDialog';
 import Pager from '../components/Pager';
+import AiChatDialog from '../components/AiChatDialog';
 import { collectionOptions } from '../components/CollectionSelect';
 import { useI18n } from '../i18n';
 import type { SearchResult } from '../types';
@@ -48,6 +49,7 @@ export default function HomePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [checking, setChecking] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ url: string; title: string } | null>(null);
+  const [showAiChat, setShowAiChat] = useState(false);
   const requestId = useRef(0);
   const uploadInput = useRef<HTMLInputElement>(null);
 
@@ -267,6 +269,9 @@ export default function HomePage() {
         >
           {view === 'grid' ? t('列表视图') : t('网格视图')}
         </button>
+        <button className="btn ghost" onClick={() => setShowAiChat(true)}>
+          {t('AI 问答')}
+        </button>
         <button
           className="btn ghost"
           onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
@@ -462,6 +467,8 @@ export default function HomePage() {
           }}
         />
       )}
+
+      {showAiChat && <AiChatDialog onClose={() => setShowAiChat(false)} />}
 
       {shareTarget && (
         <LinkFormDialog

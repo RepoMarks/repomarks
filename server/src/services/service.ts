@@ -154,7 +154,12 @@ export class DataService {
     repo: RepoStatus;
     sync: SyncState;
     archive: ArchiveAvailability;
-    ai: { enabled: boolean; model: string | null };
+    ai: {
+      enabled: boolean;
+      model: string | null;
+      embeddingModel: string | null;
+      embedded: number;
+    };
     stats: ReturnType<LinkStore['stats']>;
     largestArchives: Array<{ id: string; title: string; bytes: number }>;
     warnings: string[];
@@ -166,7 +171,12 @@ export class DataService {
       repo,
       sync: this.syncState,
       archive: this.archiveAvailability(),
-      ai: { enabled: this.aiEnabled, model: this.config.aiModel || null },
+      ai: {
+        enabled: this.aiEnabled,
+        model: this.config.aiModel || null,
+        embeddingModel: this.embeddingModelName() || null,
+        embedded: this.store.embeddingCount,
+      },
       stats: this.store.stats(),
       largestArchives: this.largestArchives(5),
       warnings: this.store.warnings.slice(0, 50),
@@ -958,6 +968,214 @@ export class DataService {
       this.schedulePush();
       return updated;
     });
+  }
+
+  // ---------------------------------------------------------------- 语义搜索 / AI 问答
+
+  get aiEmbeddingEnabled(): boolean {
+    return Boolean(
+      this.config.aiBaseUrl && (this.config.aiEmbeddingModel || this.config.aiModel)
+    );
+  }
+
+  private embeddingModelName(): string {
+    return this.config.aiEmbeddingModel || this.config.aiModel;
+  }
+
+  private async embedTexts(inputs: string[]): Promise<Float32Array[]> {
+    if (!this.aiEmbeddingEnabled) {
+      throw new HttpError(400, '未配置向量模型：请设置 AI_EMBEDDING_MODEL（或 AI_MODEL）');
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.aiBaseUrl.replace(/\/+$/, '')}/embeddings`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.config.aiApiKey ? { authorization: `Bearer ${this.config.aiApiKey}` } : {}),
+        },
+        body: JSON.stringify({ model: this.embeddingModelName(), input: inputs }),
+        signal: AbortSignal.timeout(this.config.aiTimeoutMs),
+      });
+    } catch (err) {
+      throw new HttpError(502, `向量请求失败: ${(err as Error).message}`);
+    }
+    if (!response.ok) throw new HttpError(502, `向量请求失败: HTTP ${response.status}`);
+    const payload = (await response.json()) as {
+      data?: Array<{ embedding?: number[] }>;
+    };
+    const vectors = (payload.data ?? []).map((item) => Float32Array.from(item.embedding ?? []));
+    if (vectors.length !== inputs.length || vectors.some((vector) => vector.length === 0)) {
+      throw new HttpError(502, '向量服务返回的数据不完整');
+    }
+    return vectors;
+  }
+
+  private async linkEmbeddingText(link: LinkRecord): Promise<string> {
+    let excerpt = '';
+    if (link.readablePath) {
+      try {
+        const gzipped = await fsp.readFile(this.store.abs(link.readablePath));
+        excerpt = (await gunzipHtml(gzipped)).slice(0, 1200);
+      } catch {
+        /* 忽略 */
+      }
+    }
+    return [
+      link.title,
+      link.url,
+      link.description ?? '',
+      link.tags.map((tag) => `#${tag}`).join(' '),
+      excerpt,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  async aiEmbedLinks(limit = 50): Promise<{ embedded: number; remaining: number }> {
+    const pending = [...this.store.links.values()]
+      .filter((link) => !this.store.hasEmbedding(link.id))
+      .slice(0, Math.min(Math.max(limit, 1), 200));
+    if (pending.length === 0) return { embedded: 0, remaining: 0 };
+
+    const texts: string[] = [];
+    const targets: LinkRecord[] = [];
+    for (const link of pending) {
+      const text = await this.linkEmbeddingText(link);
+      if (!text.trim()) continue;
+      texts.push(text);
+      targets.push(link);
+    }
+    if (texts.length === 0) return { embedded: 0, remaining: 0 };
+
+    const vectors = await this.embedTexts(texts);
+    const paths = new Set<string>();
+    for (let index = 0; index < targets.length; index++) {
+      paths.add(await this.store.upsertEmbedding(targets[index].id, vectors[index]));
+    }
+    await this.mutex.run(async () => {
+      await this.repo.commit([...paths], `ai: embed ${targets.length} links`);
+      this.schedulePush();
+    });
+    const remaining = [...this.store.links.values()].filter(
+      (link) => !this.store.hasEmbedding(link.id)
+    ).length;
+    return { embedded: targets.length, remaining };
+  }
+
+  private cosine(a: Float32Array, b: Float32Array): number {
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    const length = Math.min(a.length, b.length);
+    for (let index = 0; index < length; index++) {
+      dot += a[index] * b[index];
+      normA += a[index] * a[index];
+      normB += b[index] * b[index];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dot / Math.sqrt(normA * normB);
+  }
+
+  async aiSemanticSearch(
+    query: string,
+    topK = 10
+  ): Promise<Array<{ link: LinkRecord; score: number }>> {
+    const text = query?.trim();
+    if (!text) throw new HttpError(400, '请输入查询内容');
+    if (this.store.embeddingCount === 0) {
+      throw new HttpError(400, '还没有语义索引，请先在设置里重建语义索引');
+    }
+    const [vector] = await this.embedTexts([text]);
+    return this.store
+      .allEmbeddings()
+      .map(([id, embedding]) => ({ id, score: this.cosine(vector, embedding) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(Math.max(topK, 1), 50))
+      .map(({ id, score }) => ({ link: this.store.findById(id), score }))
+      .filter((item): item is { link: LinkRecord; score: number } => Boolean(item.link));
+  }
+
+  async aiChat(
+    question: string
+  ): Promise<{ answer: string; sources: Array<{ id: string; title: string; url: string }> }> {
+    const text = question?.trim();
+    if (!text) throw new HttpError(400, '请输入问题');
+    if (!this.aiEnabled) throw new HttpError(400, '未配置 AI：请设置 AI_BASE_URL 与 AI_MODEL');
+
+    let candidates: LinkRecord[] = [];
+    if (this.store.embeddingCount > 0) {
+      try {
+        candidates = (await this.aiSemanticSearch(text, 5)).map((item) => item.link);
+      } catch {
+        /* 回退到关键词搜索 */
+      }
+    }
+    if (candidates.length === 0) {
+      candidates = this.search({ q: text, perPage: 5 }).items;
+    }
+
+    const parts: string[] = [];
+    for (const link of candidates) {
+      let excerpt = '';
+      if (link.readablePath) {
+        try {
+          const gzipped = await fsp.readFile(this.store.abs(link.readablePath));
+          excerpt = (await gunzipHtml(gzipped)).slice(0, 800);
+        } catch {
+          /* 忽略 */
+        }
+      }
+      parts.push(
+        [
+          `Title: ${link.title}`,
+          `URL: ${link.url}`,
+          link.description ? `Description: ${link.description}` : '',
+          excerpt ? `Content: ${excerpt}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      );
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.aiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.config.aiApiKey ? { authorization: `Bearer ${this.config.aiApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: this.config.aiModel,
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You answer questions about the user\'s saved bookmarks. Use only the provided sources; say when the answer is not in them. Answer in the same language as the question.',
+            },
+            {
+              role: 'user',
+              content: `Sources:\n\n${parts.join('\n\n---\n\n')}\n\nQuestion: ${text}`,
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(this.config.aiTimeoutMs),
+      });
+    } catch (err) {
+      throw new HttpError(502, `AI 请求失败: ${(err as Error).message}`);
+    }
+    if (!response.ok) throw new HttpError(502, `AI 请求失败: HTTP ${response.status}`);
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const answer = payload.choices?.[0]?.message?.content?.trim() ?? '';
+    if (!answer) throw new HttpError(502, 'AI 没有返回内容');
+    return {
+      answer,
+      sources: candidates.map((link) => ({ id: link.id, title: link.title, url: link.url })),
+    };
   }
 
   // ---------------------------------------------------------------- 批量操作

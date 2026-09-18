@@ -20,7 +20,13 @@
 - **批量操作**：多选后批量打标签 / 移入收藏夹 / 置顶 / 抓取存档 / 删除
 - **公开分享**：收藏夹一键公开，生成只读分享页和 RSS 订阅源（可随时关闭）
 - **API 密钥**：为浏览器扩展（仓库内 `extension/`）和脚本等第三方客户端提供访问令牌
-- **可选 AI**：对接任意 OpenAI 兼容接口（本地 Ollama 或云端），一键生成标签与摘要
+- **标签管理 / 死链检查 / 稍后读**：重命名合并标签、批量检查失效链接、未读队列与批量标记
+- **全文搜索**：索引存仓库（`index/search.jsonl`），支持 `site:`、`after:`、`before:`、`is:pinned`、`is:dead`、`is:failed`、`is:read` 等语法与命中摘要
+- **Markdown 导出**：一键导出全部链接、单条复制、在仓库生成 `index/*.md` 收藏夹索引
+- **加密分享**：公开分享支持密码与有效期；外部 RSS 订阅可自动收纳进收藏夹
+- **兼容 API 与扩展**：`/api/v1`（Linkwarden 风格，供 Floccus 等使用）；浏览器扩展支持侧边栏与"选中文字存为高亮"
+- **BASE_PATH**：支持反向代理子路径部署
+- **可选 AI**：对接任意 OpenAI 兼容接口（本地 Ollama 或云端），支持标签/摘要、语义搜索与"书签问答"
 - **文件上传**：把图片 / PDF / HTML 作为书签保存；也可以给已有链接上传自己的 SingleFile / PDF / 截图存档
 - 导入浏览器书签（Chrome / Edge / Firefox 的 Netscape HTML）和 JSON（含 Linkwarden 导出），目录自动转收藏夹，重复链接跳过
 - 导出 JSON；仓库里数据全是可读的 JSONL/Markdown 风格文本，可直接手改后 `git push`

@@ -246,6 +246,36 @@ export function createRouter(service: DataService, auth: Auth): Router {
   );
 
   router.post(
+    '/ai/embed',
+    wrap(async (req, res) => {
+      const limit = Number(req.body?.limit ?? 50) || 50;
+      res.json(await service.aiEmbedLinks(limit));
+    })
+  );
+
+  router.post(
+    '/ai/search',
+    wrap(async (req, res) => {
+      const query = requireString(req.body?.q, 'q');
+      const topK = Number(req.body?.topK ?? 10) || 10;
+      const results = await service.aiSemanticSearch(query, topK);
+      res.json({
+        results: results.map((item) => ({
+          link: item.link,
+          score: Math.round(item.score * 1000) / 1000,
+        })),
+      });
+    })
+  );
+
+  router.post(
+    '/ai/chat',
+    wrap(async (req, res) => {
+      res.json(await service.aiChat(requireString(req.body?.question, 'question')));
+    })
+  );
+
+  router.post(
     '/links/:id/ai',
     wrap(async (req, res) => {
       res.json(await service.aiSuggest(req.params.id, req.body?.apply === true));

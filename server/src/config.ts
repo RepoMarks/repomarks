@@ -49,6 +49,7 @@ export interface Config {
   aiBaseUrl: string;
   aiApiKey: string;
   aiModel: string;
+  aiEmbeddingModel: string;
   aiTimeoutMs: number;
   archiveEngine: ArchiveEngine;
   archiveFormats: ArchiveFormat[];
@@ -110,6 +111,7 @@ export function loadConfig(): Config {
     aiBaseUrl: str('AI_BASE_URL'),
     aiApiKey: str('AI_API_KEY'),
     aiModel: str('AI_MODEL'),
+    aiEmbeddingModel: str('AI_EMBEDDING_MODEL'),
     aiTimeoutMs: num('AI_TIMEOUT', 30000),
     archiveEngine: (str('ARCHIVE_ENGINE', 'auto') as ArchiveEngine) ?? 'auto',
     archiveFormats: str('ARCHIVE_FORMATS', 'html,readable,screenshot,pdf')

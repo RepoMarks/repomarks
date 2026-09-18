@@ -143,6 +143,24 @@ export const api = {
       body: JSON.stringify({ format, dataBase64 }),
     }),
 
+  aiEmbed: (limit = 50) =>
+    request<{ embedded: number; remaining: number }>('/ai/embed', {
+      method: 'POST',
+      body: JSON.stringify({ limit }),
+    }),
+
+  aiSearch: (q: string, topK = 10) =>
+    request<{ results: Array<{ link: LinkRecord; score: number }> }>('/ai/search', {
+      method: 'POST',
+      body: JSON.stringify({ q, topK }),
+    }),
+
+  aiChat: (question: string) =>
+    request<{ answer: string; sources: Array<{ id: string; title: string; url: string }> }>(
+      '/ai/chat',
+      { method: 'POST', body: JSON.stringify({ question }) }
+    ),
+
   suggestAi: (id: string, apply = false) =>
     request<{ tags: string[]; summary: string; applied: boolean }>(`/links/${id}/ai`, {
       method: 'POST',

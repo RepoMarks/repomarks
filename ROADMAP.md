@@ -37,10 +37,10 @@ Smoke coverage: `16j`–`16n` in `scripts/http-smoke.mjs`.
 
 Smoke coverage: `16o`–`16r` in `scripts/http-smoke.mjs`, plus the standalone base-path check.
 
-## Batch 4 — Differentiators
+## Batch 4 — Differentiators ✅ (released)
 
-- [ ] AI semantic search and "chat with your bookmarks" (embeddings stored in the repo, Ollama/OpenAI)
-- [ ] Multi-user, multi-repository mode (user registry in a parent directory repo)
+- [x] AI semantic search and "chat with your bookmarks" — embeddings stored in `index/embeddings.jsonl`, cosine ranking, retrieval-augmented answers with sources (`/api/ai/embed`, `/api/ai/search`, `/api/ai/chat`, "Ask AI" dialog)
+- [-] Multi-user, multi-repository mode — **cancelled**: it conflicts with the product's core design (one password, one repository), and API keys already cover multiple devices/clients. A future version could run one instance per repo instead.
 
 ## Out of scope
 

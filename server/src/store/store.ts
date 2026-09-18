@@ -33,6 +33,8 @@ export class LinkStore {
   private searchText = new Map<string, string>();
   private searchTextLower = new Map<string, string>();
   private searchIndexLines = 0;
+  private embeddings = new Map<string, Float32Array>();
+  private embeddingLines = 0;
 
   constructor(
     private dir: string,
@@ -81,6 +83,7 @@ export class LinkStore {
     await this.loadApiKeys();
     await this.loadShards();
     await this.loadSearchIndex();
+    await this.loadEmbeddings();
     return created;
   }
 
@@ -144,6 +147,82 @@ export class LinkStore {
 
   hasSearchText(id: string): boolean {
     return this.searchTextLower.has(id);
+  }
+
+  // ---------------------------------------------------------------- 语义向量
+
+  private async loadEmbeddings(): Promise<void> {
+    this.embeddings.clear();
+    this.embeddingLines = 0;
+    const file = path.join(this.dir, 'index', 'embeddings.jsonl');
+    if (!fs.existsSync(file)) return;
+    const raw = await fsp.readFile(file, 'utf8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      this.embeddingLines++;
+      try {
+        const entry = JSON.parse(line) as { id?: string; vector?: string };
+        if (!entry.id || !entry.vector) continue;
+        const buffer = Buffer.from(entry.vector, 'base64');
+        this.embeddings.set(
+          entry.id,
+          new Float32Array(buffer.buffer, buffer.byteOffset, buffer.length / 4)
+        );
+      } catch {
+        /* 跳过损坏行 */
+      }
+    }
+  }
+
+  async upsertEmbedding(id: string, vector: Float32Array): Promise<string> {
+    const rel = 'index/embeddings.jsonl';
+    this.embeddings.set(id, vector);
+    if (this.embeddingLines > this.embeddings.size * 1.5 + 50) {
+      await this.saveEmbeddings();
+      return rel;
+    }
+    const buffer = Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
+    await fsp.mkdir(path.dirname(this.abs(rel)), { recursive: true });
+    await fsp.appendFile(
+      this.abs(rel),
+      `${JSON.stringify({ id, vector: buffer.toString('base64') })}\n`,
+      'utf8'
+    );
+    this.embeddingLines++;
+    return rel;
+  }
+
+  async saveEmbeddings(): Promise<string[]> {
+    const rel = 'index/embeddings.jsonl';
+    const lines = [...this.embeddings.entries()].map(([id, vector]) =>
+      JSON.stringify({
+        id,
+        vector: Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength).toString('base64'),
+      })
+    );
+    await this.atomicWrite(rel, lines.length > 0 ? `${lines.join('\n')}\n` : '');
+    this.embeddingLines = lines.length;
+    return [rel];
+  }
+
+  deleteEmbedding(id: string): void {
+    this.embeddings.delete(id);
+  }
+
+  getEmbedding(id: string): Float32Array | undefined {
+    return this.embeddings.get(id);
+  }
+
+  allEmbeddings(): Array<[string, Float32Array]> {
+    return [...this.embeddings.entries()];
+  }
+
+  get embeddingCount(): number {
+    return this.embeddings.size;
+  }
+
+  hasEmbedding(id: string): boolean {
+    return this.embeddings.has(id);
   }
 
   /** 用给定内容整体替换全文索引（重建时使用） */
@@ -371,6 +450,10 @@ export class LinkStore {
     changed.push(this.shardRel(shardName));
     if (this.searchTextLower.has(id)) {
       changed.push(await this.appendSearchText(id, ''));
+    }
+    if (this.embeddings.has(id)) {
+      this.deleteEmbedding(id);
+      changed.push(...(await this.saveEmbeddings()));
     }
     return changed;
   }
