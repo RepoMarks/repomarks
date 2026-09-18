@@ -15,6 +15,7 @@ import LinkDetailPage from './pages/LinkDetailPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import TagsPage from './pages/TagsPage';
+import ShareTargetPage from './pages/ShareTargetPage';
 import LoginPage from './pages/LoginPage';
 
 interface AppContextValue {
@@ -108,6 +109,7 @@ export default function App() {
             <Route path="/import" element={<ImportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/tags" element={<TagsPage />} />
+            <Route path="/share-target" element={<ShareTargetPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

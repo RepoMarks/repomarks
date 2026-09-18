@@ -140,6 +140,7 @@ export class DataService {
     archive: ArchiveAvailability;
     ai: { enabled: boolean; model: string | null };
     stats: ReturnType<LinkStore['stats']>;
+    largestArchives: Array<{ id: string; title: string; bytes: number }>;
     warnings: string[];
     uptimeSeconds: number;
     node: string;
@@ -151,6 +152,7 @@ export class DataService {
       archive: this.archiveAvailability(),
       ai: { enabled: this.aiEnabled, model: this.config.aiModel || null },
       stats: this.store.stats(),
+      largestArchives: this.largestArchives(5),
       warnings: this.store.warnings.slice(0, 50),
       uptimeSeconds: Math.round((Date.now() - this.startTime) / 1000),
       node: process.version,
@@ -210,7 +212,12 @@ export class DataService {
     const counts = this.store.collectionCounts();
     return [...this.store.collections.values()]
       .map((collection) => ({ ...collection, linkCount: counts.get(collection.id) ?? 0 }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+      .sort((a, b) => {
+        const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+        const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.name.localeCompare(b.name, 'zh-Hans-CN');
+      });
   }
 
   private requireCollection(id: string | null | undefined): void {
@@ -222,7 +229,10 @@ export class DataService {
   async addLink(input: LinkInput): Promise<LinkRecord> {
     const url = normalizeUrl(input.url ?? '');
     assertAllowedUrl(url, this.config.allowPrivateUrls);
-    if (this.store.findByUrl(url)) throw new HttpError(409, '该链接已存在');
+    const existingLink = this.store.findByUrl(url);
+    if (existingLink) {
+      throw new HttpError(409, '该链接已存在', { existingId: existingLink.id });
+    }
     this.requireCollection(input.collectionId);
 
     let meta: FetchedMetadata | undefined;
@@ -236,7 +246,10 @@ export class DataService {
     }
 
     return this.mutex.run(async () => {
-      if (this.store.findByUrl(url)) throw new HttpError(409, '该链接已存在');
+      const duplicate = this.store.findByUrl(url);
+      if (duplicate) {
+        throw new HttpError(409, '该链接已存在', { existingId: duplicate.id });
+      }
       this.requireCollection(input.collectionId);
       const now = new Date().toISOString();
       const record: LinkRecord = {
@@ -811,6 +824,102 @@ export class DataService {
     });
   }
 
+  // ---------------------------------------------------------------- 维护
+
+  largestArchives(limit = 5): Array<{ id: string; title: string; bytes: number }> {
+    return [...this.store.links.values()]
+      .map((link) => ({
+        id: link.id,
+        title: link.title,
+        bytes:
+          (link.archiveSize ?? 0) +
+          (link.readableSize ?? 0) +
+          (link.screenshotSize ?? 0) +
+          (link.pdfSize ?? 0),
+      }))
+      .filter((item) => item.bytes > 0)
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, limit);
+  }
+
+  /** 对超过 maxAgeDays 未更新的存档重新抓取（每次最多 limit 条） */
+  async refreshStaleArchives(maxAgeDays: number, limit = 5): Promise<{ refreshed: number }> {
+    if (maxAgeDays <= 0) return { refreshed: 0 };
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const stale = [...this.store.links.values()]
+      .filter(
+        (link) =>
+          link.kind !== 'file' &&
+          Boolean(link.archivedAt) &&
+          link.archiveStatus !== 'pending' &&
+          Date.parse(link.archivedAt ?? '') < cutoff
+      )
+      .sort((a, b) => (a.archivedAt ?? '').localeCompare(b.archivedAt ?? ''))
+      .slice(0, limit);
+    for (const link of stale) {
+      try {
+        await this.archiveLink(link.id);
+      } catch (err) {
+        logger.warn(`定时重新存档失败 ${link.url}: ${(err as Error).message}`);
+      }
+    }
+    if (stale.length > 0) logger.info(`已触发 ${stale.length} 条链接的定时重新存档`);
+    return { refreshed: stale.length };
+  }
+
+  async removeArchiveFormat(
+    id: string,
+    format: 'html' | 'readable' | 'screenshot' | 'pdf'
+  ): Promise<LinkRecord> {
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const paths: string[] = [];
+      const updated: LinkRecord = { ...current, updatedAt: new Date().toISOString() };
+
+      if (format === 'html' && current.archivePath) {
+        paths.push(...(await this.store.deleteArchiveFile(current.archivePath)));
+        updated.archivePath = null;
+        updated.archiveSize = null;
+        updated.archiveEngine = null;
+      } else if (format === 'readable' && current.readablePath) {
+        paths.push(...(await this.store.deleteArchiveFile(current.readablePath)));
+        updated.readablePath = null;
+        updated.readableSize = null;
+      } else if (format === 'screenshot' && current.screenshotPath) {
+        paths.push(...(await this.store.deleteArchiveFile(current.screenshotPath)));
+        updated.screenshotPath = null;
+        updated.screenshotSize = null;
+      } else if (format === 'pdf' && current.pdfPath) {
+        paths.push(...(await this.store.deleteArchiveFile(current.pdfPath)));
+        updated.pdfPath = null;
+        updated.pdfSize = null;
+      } else {
+        throw new HttpError(404, `该链接没有 ${format} 格式的存档`);
+      }
+
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit([...changed, ...paths], `archive: remove ${format} ${shorten(current.title)}`);
+      this.schedulePush();
+      return updated;
+    });
+  }
+
+  // ---------------------------------------------------------------- 稍后读
+
+  async markRead(id: string, read: boolean): Promise<LinkRecord> {
+    return this.mutex.run(async () => {
+      const current = this.store.findById(id);
+      if (!current) throw new HttpError(404, '链接不存在');
+      const now = new Date().toISOString();
+      const updated: LinkRecord = { ...current, readAt: read ? now : null, updatedAt: now };
+      const changed = await this.store.putLink(updated);
+      await this.repo.commit(changed, `read: ${read ? 'mark' : 'unmark'} ${shorten(current.title)}`);
+      this.schedulePush();
+      return updated;
+    });
+  }
+
   // ---------------------------------------------------------------- 批量操作
 
   async bulkUpdate(
@@ -885,6 +994,12 @@ export class DataService {
             break;
           case 'unpin':
             updated.pinned = false;
+            break;
+          case 'read':
+            updated.readAt = now;
+            break;
+          case 'unread':
+            updated.readAt = null;
             break;
           default:
             throw new HttpError(400, `不支持的操作: ${action}`);
@@ -1214,10 +1329,14 @@ export class DataService {
     this.requireCollection(input.parentId);
     return this.mutex.run(async () => {
       const now = new Date().toISOString();
+      const siblingOrders = [...this.store.collections.values()]
+        .filter((item) => (item.parentId ?? null) === (input.parentId ?? null))
+        .map((item) => item.order ?? 0);
       const collection: Collection = {
         id: ulid(),
         name: name.slice(0, 200),
         color: input.color?.trim() || pickColor(name),
+        order: siblingOrders.length > 0 ? Math.max(...siblingOrders) + 1 : 0,
         icon: input.icon?.trim().slice(0, 2000) || '',
         parentId: input.parentId ?? null,
         isPublic: false,
@@ -1280,6 +1399,36 @@ export class DataService {
       await this.repo.commit(changed, `collection: update ${shorten(updated.name)}`);
       this.schedulePush();
       return updated;
+    });
+  }
+
+  async moveCollection(id: string, direction: 'up' | 'down'): Promise<Collection> {
+    return this.mutex.run(async () => {
+      const current = this.store.collections.get(id);
+      if (!current) throw new HttpError(404, '收藏夹不存在');
+      const siblings = [...this.store.collections.values()]
+        .filter((item) => (item.parentId ?? null) === (current.parentId ?? null))
+        .sort((a, b) => {
+          const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+          const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.name.localeCompare(b.name, 'zh-Hans-CN');
+        });
+      const index = siblings.findIndex((item) => item.id === id);
+      const swapWith = direction === 'up' ? index - 1 : index + 1;
+      if (index === -1 || swapWith < 0 || swapWith >= siblings.length) return current;
+
+      const now = new Date().toISOString();
+      const reordered = [...siblings];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(swapWith, 0, moved);
+      reordered.forEach((item, position) => {
+        this.store.collections.set(item.id, { ...item, order: position, updatedAt: now });
+      });
+      const changed = await this.store.saveCollections();
+      await this.repo.commit(changed, `collection: reorder ${shorten(current.name)}`);
+      this.schedulePush();
+      return this.store.collections.get(id) ?? current;
     });
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { api, ApiError } from '../api';
 import { useI18n } from '../i18n';
 import type { Collection, LinkRecord, MetadataPreview } from '../types';
 import Modal from './Modal';
@@ -11,6 +12,8 @@ interface LinkFormDialogProps {
   collections: Collection[];
   tagSuggestions: string[];
   defaultCollectionId?: string | null;
+  initialUrl?: string;
+  initialTitle?: string;
   onClose: () => void;
   onSaved: (link: LinkRecord) => void;
 }
@@ -20,13 +23,16 @@ export default function LinkFormDialog({
   collections,
   tagSuggestions,
   defaultCollectionId,
+  initialUrl,
+  initialTitle,
   onClose,
   onSaved,
 }: LinkFormDialogProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const isEdit = Boolean(initial);
-  const [url, setUrl] = useState(initial?.url ?? '');
-  const [title, setTitle] = useState(initial?.title ?? '');
+  const [url, setUrl] = useState(initial?.url ?? initialUrl ?? '');
+  const [title, setTitle] = useState(initial?.title ?? initialTitle ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [icon, setIcon] = useState(initial?.icon ?? '');
@@ -39,7 +45,12 @@ export default function LinkFormDialog({
   const [metaError, setMetaError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const lastFetched = useRef('');
+
+  useEffect(() => {
+    setDuplicateId(null);
+  }, [url]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -104,6 +115,46 @@ export default function LinkFormDialog({
         }
       }
       onSaved(saved);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        typeof err.details?.existingId === 'string'
+      ) {
+        setDuplicateId(err.details.existingId);
+        setError(null);
+      } else {
+        setError((err as Error).message);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const mergeIntoExisting = async () => {
+    if (!duplicateId) return;
+    setSaving(true);
+    try {
+      const existing = await api.getLink(duplicateId);
+      const mergedTags = [...existing.tags];
+      for (const tag of tags) {
+        if (!mergedTags.some((item) => item.toLowerCase() === tag.toLowerCase())) {
+          mergedTags.push(tag);
+        }
+      }
+      await api.updateLink(duplicateId, {
+        title:
+          existing.title && existing.title !== existing.url
+            ? existing.title
+            : title || existing.title,
+        description: existing.description || description,
+        notes: existing.notes || notes,
+        icon: existing.icon ?? (icon || null),
+        tags: mergedTags,
+        collectionId: existing.collectionId ?? (collectionId || null),
+        pinned: Boolean(existing.pinned || pinned),
+      });
+      onSaved(existing);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -213,6 +264,24 @@ export default function LinkFormDialog({
           />
           {t('保存后立即抓取网页存档')}
         </label>
+      )}
+
+      {duplicateId && (
+        <div className="result-box" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div>{t('该链接已存在，你可以打开已有条目，或把当前填写的信息合并过去。')}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn small" onClick={() => navigate(`/links/${duplicateId}`)}>
+              {t('打开已有条目')}
+            </button>
+            <button
+              className="btn small primary"
+              disabled={saving}
+              onClick={() => void mergeIntoExisting()}
+            >
+              {t('合并到已有链接')}
+            </button>
+          </div>
+        </div>
       )}
 
       {error && <div className="field-error">{error}</div>}

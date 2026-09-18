@@ -52,6 +52,9 @@ export interface Config {
   archiveEngine: ArchiveEngine;
   archiveFormats: ArchiveFormat[];
   archiveWayback: boolean;
+  refreshArchiveDays: number;
+  refreshArchiveLimit: number;
+  feedSyncIntervalHours: number;
   archiveBrowserPath: string;
   archiveBrowserArgs: string[];
   archiveTimeoutMs: number;
@@ -107,6 +110,9 @@ export function loadConfig(): Config {
         ARCHIVE_FORMAT_VALUES.includes(value as ArchiveFormat)
       ),
     archiveWayback: bool('ARCHIVE_WAYBACK', false),
+    refreshArchiveDays: Math.max(0, num('REFRESH_ARCHIVE_DAYS', 0)),
+    refreshArchiveLimit: Math.max(1, num('REFRESH_ARCHIVE_LIMIT', 5)),
+    feedSyncIntervalHours: Math.max(0, num('FEED_SYNC_INTERVAL_HOURS', 0)),
     archiveBrowserPath: str('ARCHIVE_BROWSER_PATH'),
     archiveBrowserArgs: str('ARCHIVE_BROWSER_ARGS')
       .split(',')

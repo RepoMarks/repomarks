@@ -361,6 +361,13 @@ export default function LinkDetailPage() {
             <button className="btn" disabled={aiBusy} onClick={() => void runAi()}>
               {aiBusy ? t('AI 生成中…') : t('AI 标签与摘要')}
             </button>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => void run(() => api.markRead(link.id, !link.readAt))}
+            >
+              {link.readAt ? t('标记未读') : t('标记已读')}
+            </button>
             <button className="btn" onClick={() => setEditing(true)}>
               {t('编辑')}
             </button>
@@ -416,6 +423,25 @@ export default function LinkDetailPage() {
                     {item.label}
                   </button>
                 ))}
+                {activeFormat &&
+                  ['html', 'readable', 'screenshot', 'pdf'].includes(activeFormat) && (
+                    <button
+                      className="icon-btn danger"
+                      style={{ marginLeft: 'auto' }}
+                      title={t('删除此格式')}
+                      onClick={() => {
+                        if (!window.confirm(t('确定删除该格式的存档吗？'))) return;
+                        void run(() =>
+                          api.removeArchiveFormat(
+                            link.id,
+                            activeFormat as 'html' | 'readable' | 'screenshot' | 'pdf'
+                          )
+                        );
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
               </div>
 
               <div className="format-viewer">

@@ -23,6 +23,7 @@ export default function CollectionDialog({
   const [description, setDescription] = useState(collection.description ?? '');
   const [parentId, setParentId] = useState(collection.parentId ?? '');
   const [icon, setIcon] = useState(collection.icon ?? '');
+  const [color, setColor] = useState(collection.color ?? '#5b8def');
   const [isPublic, setIsPublic] = useState(Boolean(collection.isPublic));
   const [slug, setSlug] = useState(collection.slug ?? '');
   const [busy, setBusy] = useState(false);
@@ -62,6 +63,7 @@ export default function CollectionDialog({
         name,
         description,
         icon,
+        color,
         parentId: parentId || null,
         isPublic,
       });
@@ -104,6 +106,57 @@ export default function CollectionDialog({
           placeholder={t('公开分享页会显示这段描述')}
           onChange={(event) => setDescription(event.target.value)}
         />
+      </div>
+
+      <div className="field">
+        <label>{t('颜色')}</label>
+        <div className="color-swatches">
+          {['#5b8def', '#2fb37e', '#e8a33d', '#d95c7a', '#9b6ee0', '#29a4b8', '#c96f3c', '#7a8b3f'].map(
+            (preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`color-swatch ${color === preset ? 'active' : ''}`}
+                style={{ background: preset }}
+                onClick={() => setColor(preset)}
+              />
+            )
+          )}
+          <input
+            type="color"
+            value={color}
+            onChange={(event) => setColor(event.target.value)}
+            style={{ width: 28, height: 22, padding: 0, border: 'none', background: 'transparent' }}
+          />
+        </div>
+      </div>
+
+      <div className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <label style={{ margin: 0 }}>{t('上移')} / {t('下移')}</label>
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            void api
+              .moveCollection(collection.id, 'up')
+              .then(() => onChanged())
+              .catch((err) => setError((err as Error).message));
+          }}
+        >
+          {t('上移')}
+        </button>
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            void api
+              .moveCollection(collection.id, 'down')
+              .then(() => onChanged())
+              .catch((err) => setError((err as Error).message));
+          }}
+        >
+          {t('下移')}
+        </button>
       </div>
 
       <div className="field">

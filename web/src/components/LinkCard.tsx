@@ -131,6 +131,9 @@ export default function LinkCard({
                 ★
               </span>
             )}
+            {!link.readAt && link.archivedAt && (
+              <span className="unread-dot" title={t('未读')} />
+            )}
           </div>
           <h3 className="card-title">
             <Highlight text={link.title} terms={highlight} />

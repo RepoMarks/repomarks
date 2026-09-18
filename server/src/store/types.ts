@@ -38,6 +38,7 @@ export interface LinkRecord {
   httpStatus?: number | null;
   isDead?: boolean | null;
   checkError?: string | null;
+  readAt?: string | null;
 }
 
 export interface Highlight {
@@ -57,6 +58,11 @@ export interface Collection {
   isPublic?: boolean;
   slug?: string;
   description?: string;
+  passwordHash?: string;
+  shareExpiresAt?: string | null;
+  feedUrl?: string;
+  feedLastFetchedAt?: string | null;
+  order?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,6 +87,7 @@ export interface SearchQuery {
   collectionId?: string;
   tag?: string;
   archived?: boolean;
+  read?: boolean;
   sort?: 'created' | 'updated' | 'title';
   order?: 'asc' | 'desc';
   page?: number;

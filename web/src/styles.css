@@ -578,6 +578,15 @@ textarea {
   padding-top: 6px;
 }
 
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  margin-left: 2px;
+}
+
 mark {
   background: rgba(245, 215, 110, 0.35);
   color: inherit;

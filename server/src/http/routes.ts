@@ -95,6 +95,10 @@ export function createRouter(service: DataService, auth: Auth): Router {
           collectionId: str(req.query.collection),
           tag: str(req.query.tag),
           archived: archivedParam === undefined ? undefined : archivedParam === 'true',
+          read:
+            str(req.query.read) === undefined
+              ? undefined
+              : str(req.query.read) === 'true' || str(req.query.read) === 'read',
           sort: (str(req.query.sort) as 'created' | 'updated' | 'title') ?? 'updated',
           order: (str(req.query.order) as 'asc' | 'desc') ?? 'desc',
           page: Number(req.query.page) || 1,
@@ -487,6 +491,41 @@ export function createRouter(service: DataService, auth: Auth): Router {
     '/maintenance/indexes',
     wrap(async (_req, res) => {
       res.json(await service.generateIndexes());
+    })
+  );
+
+  router.post(
+    '/maintenance/refresh-archives',
+    wrap(async (req, res) => {
+      const days = Number(req.body?.days ?? 30) || 30;
+      const limit = Number(req.body?.limit ?? 5) || 5;
+      res.json(await service.refreshStaleArchives(days, Math.min(Math.max(limit, 1), 50)));
+    })
+  );
+
+  router.delete(
+    '/links/:id/archive/:format',
+    wrap(async (req, res) => {
+      const format = req.params.format as 'html' | 'readable' | 'screenshot' | 'pdf';
+      if (!['html', 'readable', 'screenshot', 'pdf'].includes(format)) {
+        throw new HttpError(400, `不支持的存档格式: ${format}`);
+      }
+      res.json(await service.removeArchiveFormat(req.params.id, format));
+    })
+  );
+
+  router.post(
+    '/collections/:id/move',
+    wrap(async (req, res) => {
+      const direction = req.body?.direction === 'up' ? 'up' : 'down';
+      res.json(await service.moveCollection(req.params.id, direction));
+    })
+  );
+
+  router.post(
+    '/links/:id/read',
+    wrap(async (req, res) => {
+      res.json(await service.markRead(req.params.id, req.body?.read !== false));
     })
   );
 

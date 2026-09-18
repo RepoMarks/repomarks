@@ -30,6 +30,7 @@ export default function HomePage() {
   const collectionId = searchParams.get('collection') ?? '';
   const tag = searchParams.get('tag') ?? '';
   const archived = searchParams.get('archived') ?? '';
+  const readFilter = searchParams.get('read') ?? '';
   const sort = searchParams.get('sort') ?? 'updated';
   const order = searchParams.get('order') ?? 'desc';
   const view = searchParams.get('view') ?? 'grid';
@@ -46,6 +47,7 @@ export default function HomePage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [checking, setChecking] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ url: string; title: string } | null>(null);
   const requestId = useRef(0);
   const uploadInput = useRef<HTMLInputElement>(null);
 
@@ -86,6 +88,7 @@ export default function HomePage() {
         collection: collectionId || undefined,
         tag: tag || undefined,
         archived: archived || undefined,
+        read: readFilter || undefined,
         sort,
         order,
         page,
@@ -137,7 +140,19 @@ export default function HomePage() {
     setSearchParams(next, { replace: true });
   };
 
-  const hasFilter = Boolean(q || collectionId || tag || archived);
+  const hasFilter = Boolean(q || collectionId || tag || archived || readFilter);
+
+  useEffect(() => {
+    const incomingUrl = searchParams.get('new');
+    if (!incomingUrl) return;
+    const incomingTitle = searchParams.get('newTitle') ?? '';
+    setShareTarget({ url: incomingUrl, title: incomingTitle });
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    next.delete('newTitle');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const activeCollection = collections.find((item) => item.id === collectionId);
   const highlightTerms = q
     .split(/\s+/)
@@ -349,6 +364,20 @@ export default function HomePage() {
             >
               {t('抓取存档')}
             </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('read')}
+            >
+              {t('标记已读')}
+            </button>
+            <button
+              className="btn small"
+              disabled={selected.size === 0}
+              onClick={() => void runBulk('unread')}
+            >
+              {t('标记未读')}
+            </button>
             <button className="btn small" disabled={checking} onClick={() => void runCheck()}>
               {checking ? t('检查中…') : t('检查链接')}
             </button>
@@ -369,6 +398,7 @@ export default function HomePage() {
             {collectionId === '__none__' && ` ${t('未分类')}`}
             {tag && ` ${t('标签「{tag}」', { tag })}`}
             {archived === 'true' && ` ${t('已存档')}`}
+            {readFilter === 'unread' && ` ${t('稍后读')}`}
             <button
               className="icon-btn"
               style={{ marginLeft: 8 }}
@@ -427,6 +457,21 @@ export default function HomePage() {
           onClose={() => setShowAdd(false)}
           onSaved={() => {
             setShowAdd(false);
+            notifyChange();
+            load();
+          }}
+        />
+      )}
+
+      {shareTarget && (
+        <LinkFormDialog
+          collections={collections}
+          tagSuggestions={tags.map((item) => item.tag)}
+          initialUrl={shareTarget.url}
+          initialTitle={shareTarget.title}
+          onClose={() => setShareTarget(null)}
+          onSaved={() => {
+            setShareTarget(null);
             notifyChange();
             load();
           }}

@@ -368,6 +368,63 @@ try {
   }
   console.log('16i. server error i18n ok');
 
+  const orderA = await req('/api/collections', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Order A', color: '#112233' }),
+  });
+  const orderB = await req('/api/collections', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Order B' }),
+  });
+  const movedCollection = await req(`/api/collections/${orderB.data.id}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ direction: 'up' }),
+  });
+  if (movedCollection.res.status !== 200) fail(`collection move failed: ${movedCollection.text}`);
+  const collectionList = await req('/api/collections');
+  const itemA = collectionList.data.find((item) => item.id === orderA.data.id);
+  const itemB = collectionList.data.find((item) => item.id === orderB.data.id);
+  if (!(itemB.order < itemA.order)) fail('collection order not swapped');
+  if (itemA.color !== '#112233') fail('collection color not saved');
+  console.log('16j. collection color + ordering ok');
+
+  const marked = await req(`/api/links/${link.id}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ read: true }),
+  });
+  if (!marked.data.readAt) fail('mark read failed');
+  const unreadSearch = await req('/api/links?q=is:unread');
+  if (unreadSearch.data.items.some((item) => item.id === link.id)) {
+    fail('is:unread should exclude the read link');
+  }
+  await req(`/api/links/${link.id}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ read: false }),
+  });
+  console.log('16k. read later ok');
+
+  const duplicate = await req('/api/links', {
+    method: 'POST',
+    body: JSON.stringify({ url: 'https://example.com', fetchMetadata: false }),
+  });
+  if (duplicate.res.status !== 409 || !duplicate.data.details?.existingId) {
+    fail(`duplicate details missing: ${duplicate.text}`);
+  }
+  console.log('16l. duplicate details ok');
+
+  const refresh = await req('/api/maintenance/refresh-archives', {
+    method: 'POST',
+    body: JSON.stringify({ days: 0, limit: 1 }),
+  });
+  if (refresh.res.status !== 200) fail(`refresh archives failed: ${refresh.text}`);
+  console.log('16m. scheduled refresh endpoint ok');
+
+  const removedFormat = await req(`/api/links/${link.id}/archive/readable`, { method: 'DELETE' });
+  if (removedFormat.res.status !== 200 || removedFormat.data.readablePath) {
+    fail(`remove archive format failed: ${removedFormat.text}`);
+  }
+  console.log('16n. remove archive format ok');
+
   const logout = await req('/api/auth/logout', { method: 'POST' });
   if (logout.res.status !== 200) fail('logout failed');
   cookie = '';

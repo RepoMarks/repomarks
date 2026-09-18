@@ -115,6 +115,7 @@ export default function Sidebar({ open }: { open: boolean }) {
   const collectionId = params.get('collection') ?? '';
   const tag = params.get('tag') ?? '';
   const archived = params.get('archived') ?? '';
+  const readFilter = params.get('read') ?? '';
   const isHome = location.pathname === '/';
 
   useEffect(() => {
@@ -206,6 +207,14 @@ export default function Sidebar({ open }: { open: boolean }) {
             <span className="nav-dot" style={{ background: '#34b27b' }} />
             {t('已存档')}
             <span className="count">{status?.stats.archived ?? ''}</span>
+          </button>
+          <button
+            className={`nav-item ${isHome && readFilter === 'unread' ? 'active' : ''}`}
+            onClick={() => apply({ read: readFilter === 'unread' ? undefined : 'unread' })}
+          >
+            <span className="nav-dot" style={{ background: '#e8a33d' }} />
+            {t('稍后读')}
+            <span className="count">{status?.stats.unread ?? ''}</span>
           </button>
         </nav>
 

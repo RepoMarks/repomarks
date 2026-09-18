@@ -38,6 +38,7 @@ export interface LinkRecord {
   httpStatus?: number | null;
   isDead?: boolean | null;
   checkError?: string | null;
+  readAt?: string | null;
 }
 
 export interface Highlight {
@@ -57,6 +58,11 @@ export interface Collection {
   isPublic?: boolean;
   slug?: string;
   description?: string;
+  order?: number;
+  feedUrl?: string;
+  feedLastFetchedAt?: string | null;
+  shareExpiresAt?: string | null;
+  hasPassword?: boolean;
   createdAt: string;
   updatedAt: string;
   linkCount?: number;
@@ -116,11 +122,14 @@ export interface StatusResponse {
     links: number;
     archived: number;
     failed: number;
+    dead: number;
+    unread: number;
     collections: number;
     tags: number;
     uncategorized: number;
     totalArchiveBytes: number;
   };
+  largestArchives: Array<{ id: string; title: string; bytes: number }>;
   warnings: string[];
   uptimeSeconds: number;
   node: string;

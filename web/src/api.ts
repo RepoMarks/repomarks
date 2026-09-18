@@ -16,7 +16,8 @@ function lang(): Lang {
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public details?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'ApiError';
@@ -58,7 +59,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       data && typeof data === 'object' && 'error' in data
         ? String((data as { error: unknown }).error)
         : res.statusText;
-    throw new ApiError(res.status, message || `HTTP ${res.status}`);
+    const details =
+      data && typeof data === 'object' && 'details' in data
+        ? ((data as { details?: Record<string, unknown> }).details ?? undefined)
+        : undefined;
+    throw new ApiError(res.status, message || `HTTP ${res.status}`, details);
   }
   return data as T;
 }
@@ -203,6 +208,27 @@ export const api = {
     request<{ updated: number }>('/tags/merge', {
       method: 'POST',
       body: JSON.stringify({ source, target }),
+    }),
+
+  moveCollection: (id: string, direction: 'up' | 'down') =>
+    request<Collection>(`/collections/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
+
+  markRead: (id: string, read: boolean) =>
+    request<LinkRecord>(`/links/${id}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ read }),
+    }),
+
+  removeArchiveFormat: (id: string, format: 'html' | 'readable' | 'screenshot' | 'pdf') =>
+    request<LinkRecord>(`/links/${id}/archive/${format}`, { method: 'DELETE' }),
+
+  refreshArchives: (days = 30, limit = 5) =>
+    request<{ refreshed: number }>('/maintenance/refresh-archives', {
+      method: 'POST',
+      body: JSON.stringify({ days, limit }),
     }),
 
   checkLinks: (ids?: string[]) =>

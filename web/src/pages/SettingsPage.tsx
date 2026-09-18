@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [keyLabel, setKeyLabel] = useState('');
   const [newKey, setNewKey] = useState<string | null>(null);
   const [indexMessage, setIndexMessage] = useState<string | null>(null);
+  const bookmarklet = `javascript:(function(){window.open('${window.location.origin}/?new='+encodeURIComponent(location.href)+'&newTitle='+encodeURIComponent(document.title),'_blank');})()`;
 
   useEffect(() => {
     let alive = true;
@@ -187,6 +188,32 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+            <div style={{ marginTop: 14 }}>
+              {status.largestArchives.length > 0 && (
+                <div className="field-hint" style={{ marginBottom: 8 }}>
+                  {t('最大存档')}：
+                  {status.largestArchives
+                    .map((item) => `${item.title} (${formatBytes(item.bytes)})`)
+                    .join('，')}
+                </div>
+              )}
+              <button
+                className="btn"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const result = await api.refreshArchives(30, 5);
+                      setMessage(t('已触发 {count} 条链接的重新存档', { count: result.refreshed }));
+                      notifyChange();
+                    } catch (err) {
+                      window.alert((err as Error).message);
+                    }
+                  })();
+                }}
+              >
+                {t('刷新超期存档')}
+              </button>
+            </div>
           </div>
 
           <div className="panel">
@@ -255,6 +282,31 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="panel">
+            <h3>{t('保存小工具')}</h3>
+            <p style={{ marginTop: 0, color: 'var(--muted)' }}>
+              {t('把下面的链接拖到书签栏，点击即可保存当前页面：')}
+            </p>
+            <div className="share-row">
+              <input type="text" readOnly value={bookmarklet} />
+              <button
+                className="btn small"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(bookmarklet)
+                    .catch(() => window.prompt('Bookmarklet', bookmarklet));
+                }}
+              >
+                {t('复制代码')}
+              </button>
+            </div>
+            <div className="field-hint" style={{ marginTop: 8 }}>
+              <a href={bookmarklet} onClick={(event) => event.preventDefault()}>
+                ⭐ RepoMarks
+              </a>
+            </div>
           </div>
 
           <div className="panel">

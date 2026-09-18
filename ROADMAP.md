@@ -15,14 +15,16 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned · `[-]` out of scope
 
 Smoke coverage: `16c`–`16i` in `scripts/http-smoke.mjs`.
 
-## Batch 2 — Everyday workflow
+## Batch 2 — Everyday workflow ✅ (released)
 
-- [ ] Collection color picker and manual ordering
-- [ ] PWA share target + save bookmarklet
-- [ ] Duplicate link handling UI (jump to / merge the existing link)
-- [ ] Read later: read/unread state and a reading queue view
-- [ ] Scheduled re-preservation (refresh snapshots every N days)
-- [ ] Archive slimming: keep the latest N versions, warn on oversized archives
+- [x] Collection color picker and manual ordering (up/down, stored as `order`)
+- [x] PWA share target (`/share-target`) + save bookmarklet (Settings)
+- [x] Duplicate link handling UI — 409 responses carry `details.existingId`, with "open existing" / "merge into existing"
+- [x] Read later: `readAt`, `is:read` / `is:unread`, Read later view, bulk mark read/unread
+- [x] Scheduled re-preservation — `REFRESH_ARCHIVE_DAYS` / `REFRESH_ARCHIVE_LIMIT`, plus a manual button in Settings
+- [x] Archive slimming — largest-archive report, per-format deletion, and `scripts/repo-slim.mjs` for history rewrites
+
+Smoke coverage: `16j`–`16n` in `scripts/http-smoke.mjs`.
 
 ## Batch 3 — Integrations
 

@@ -58,7 +58,10 @@ export function createApp(config: Config, service: DataService, auth: Auth): Exp
   const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     const language = req.header('x-ui-language') ?? req.header('accept-language');
     if (err instanceof HttpError) {
-      res.status(err.status).json({ error: translateServerMessage(err.message, language) });
+      res.status(err.status).json({
+        error: translateServerMessage(err.message, language),
+        ...(err.details ? { details: err.details } : {}),
+      });
       return;
     }
     const message = err instanceof Error ? err.message : String(err);

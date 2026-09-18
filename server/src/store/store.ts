@@ -328,6 +328,7 @@ export class LinkStore {
     let pinnedOnly = false;
     let deadOnly = false;
     let failedOnly = false;
+    let readFilter = query.read;
     const tokens: string[] = [];
 
     for (const part of (query.q ?? '').split(/\s+/)) {
@@ -340,6 +341,8 @@ export class LinkStore {
       else if (lower === 'is:pinned') pinnedOnly = true;
       else if (lower === 'is:dead') deadOnly = true;
       else if (lower === 'is:failed') failedOnly = true;
+      else if (lower === 'is:read') readFilter = true;
+      else if (lower === 'is:unread') readFilter = false;
       else if (lower.startsWith('site:')) siteFilter = part.slice(5).toLowerCase();
       else if (lower.startsWith('after:')) afterDate = part.slice(6);
       else if (lower.startsWith('before:')) beforeDate = part.slice(7);
@@ -367,6 +370,9 @@ export class LinkStore {
     }
     if (failedOnly) {
       items = items.filter((link) => link.archiveStatus === 'failed');
+    }
+    if (readFilter !== undefined) {
+      items = items.filter((link) => (readFilter ? Boolean(link.readAt) : !link.readAt));
     }
     if (siteFilter) {
       items = items.filter((link) => {
@@ -452,6 +458,8 @@ export class LinkStore {
     links: number;
     archived: number;
     failed: number;
+    dead: number;
+    unread: number;
     collections: number;
     tags: number;
     uncategorized: number;
@@ -460,17 +468,27 @@ export class LinkStore {
     let archived = 0;
     let failed = 0;
     let uncategorized = 0;
+    let unread = 0;
+    let dead = 0;
     let totalArchiveBytes = 0;
     for (const link of this.links.values()) {
       if (link.archivedAt) archived++;
       if (link.archiveStatus === 'failed') failed++;
       if (!link.collectionId) uncategorized++;
-      if (link.archiveSize) totalArchiveBytes += link.archiveSize;
+      if (!link.readAt) unread++;
+      if (link.isDead) dead++;
+      totalArchiveBytes +=
+        (link.archiveSize ?? 0) +
+        (link.readableSize ?? 0) +
+        (link.screenshotSize ?? 0) +
+        (link.pdfSize ?? 0);
     }
     return {
       links: this.links.size,
       archived,
       failed,
+      dead,
+      unread,
       collections: this.collections.size,
       tags: this.topTags(100000).length,
       uncategorized,

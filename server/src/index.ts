@@ -20,6 +20,18 @@ async function main(): Promise<void> {
     logger.info(`当前数据: ${stats.links} 条链接 / ${stats.collections} 个收藏夹 / ${stats.archived} 个存档`);
   });
 
+  if (config.refreshArchiveDays > 0) {
+    const refresh = (): void => {
+      void service
+        .refreshStaleArchives(config.refreshArchiveDays, config.refreshArchiveLimit)
+        .catch((err) => logger.warn(`定时重新存档失败: ${(err as Error).message}`));
+    };
+    const initial = setTimeout(refresh, 90_000);
+    initial.unref?.();
+    const interval = setInterval(refresh, 24 * 60 * 60 * 1000);
+    interval.unref?.();
+  }
+
   let timer: NodeJS.Timeout | null = null;
   if (config.syncIntervalMs > 0) {
     timer = setInterval(() => {
