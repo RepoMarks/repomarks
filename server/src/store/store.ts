@@ -299,6 +299,10 @@ export class LinkStore {
     await this.atomicWrite(this.shardRel(shardName), content);
   }
 
+  async writeTextFile(rel: string, content: string): Promise<void> {
+    await this.atomicWrite(rel, content);
+  }
+
   async saveCollections(): Promise<string[]> {
     const list = [...this.collections.values()];
     await this.atomicWrite(COLLECTIONS_FILE, JSON.stringify(list, null, 2) + '\n');
@@ -318,6 +322,12 @@ export class LinkStore {
     let tagFilter = query.tag?.trim().toLowerCase();
     let collectionFilter = query.collectionId;
     let archivedFilter = query.archived;
+    let siteFilter = '';
+    let afterDate = '';
+    let beforeDate = '';
+    let pinnedOnly = false;
+    let deadOnly = false;
+    let failedOnly = false;
     const tokens: string[] = [];
 
     for (const part of (query.q ?? '').split(/\s+/)) {
@@ -327,6 +337,12 @@ export class LinkStore {
       else if (lower.startsWith('collection:')) collectionFilter = part.slice(11);
       else if (lower === 'is:archived') archivedFilter = true;
       else if (lower === 'is:unarchived') archivedFilter = false;
+      else if (lower === 'is:pinned') pinnedOnly = true;
+      else if (lower === 'is:dead') deadOnly = true;
+      else if (lower === 'is:failed') failedOnly = true;
+      else if (lower.startsWith('site:')) siteFilter = part.slice(5).toLowerCase();
+      else if (lower.startsWith('after:')) afterDate = part.slice(6);
+      else if (lower.startsWith('before:')) beforeDate = part.slice(7);
       else tokens.push(lower);
     }
 
@@ -342,6 +358,30 @@ export class LinkStore {
     }
     if (archivedFilter !== undefined) {
       items = items.filter((link) => (archivedFilter ? Boolean(link.archivedAt) : !link.archivedAt));
+    }
+    if (pinnedOnly) {
+      items = items.filter((link) => Boolean(link.pinned));
+    }
+    if (deadOnly) {
+      items = items.filter((link) => Boolean(link.isDead));
+    }
+    if (failedOnly) {
+      items = items.filter((link) => link.archiveStatus === 'failed');
+    }
+    if (siteFilter) {
+      items = items.filter((link) => {
+        try {
+          return new URL(link.url).hostname.toLowerCase().includes(siteFilter);
+        } catch {
+          return false;
+        }
+      });
+    }
+    if (afterDate) {
+      items = items.filter((link) => link.createdAt.slice(0, 10) >= afterDate);
+    }
+    if (beforeDate) {
+      items = items.filter((link) => link.createdAt.slice(0, 10) <= beforeDate);
     }
     if (tokens.length > 0) {
       items = items.filter((link) => {

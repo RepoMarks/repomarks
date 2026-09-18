@@ -21,6 +21,7 @@ import {
   assertAllowedUrl,
   fetchMetadata,
   normalizeUrl,
+  USER_AGENT,
   type FetchedMetadata,
 } from './metadata.js';
 import {
@@ -564,6 +565,250 @@ export class DataService {
       });
     }
     return { tags, summary, applied };
+  }
+
+  // ---------------------------------------------------------------- 标签管理
+
+  async renameTag(from: string, to: string): Promise<{ updated: number }> {
+    const source = from?.trim().toLowerCase();
+    const target = to?.trim();
+    if (!source || !target) throw new HttpError(400, '标签名不能为空');
+    return this.mutex.run(async () => {
+      const now = new Date().toISOString();
+      const records: LinkRecord[] = [];
+      for (const link of this.store.links.values()) {
+        if (!link.tags.some((tag) => tag.toLowerCase() === source)) continue;
+        records.push({
+          ...link,
+          tags: normalizeTags(link.tags.map((tag) => (tag.toLowerCase() === source ? target : tag))),
+          updatedAt: now,
+        });
+      }
+      if (records.length === 0) return { updated: 0 };
+      const paths = await this.store.putLinksBulk(records);
+      await this.repo.commit(paths, `tag: rename ${from} -> ${target}`);
+      this.schedulePush();
+      return { updated: records.length };
+    });
+  }
+
+  async deleteTag(tag: string): Promise<{ updated: number }> {
+    const target = tag?.trim().toLowerCase();
+    if (!target) throw new HttpError(400, '标签名不能为空');
+    return this.mutex.run(async () => {
+      const now = new Date().toISOString();
+      const records: LinkRecord[] = [];
+      for (const link of this.store.links.values()) {
+        if (!link.tags.some((item) => item.toLowerCase() === target)) continue;
+        records.push({
+          ...link,
+          tags: link.tags.filter((item) => item.toLowerCase() !== target),
+          updatedAt: now,
+        });
+      }
+      if (records.length === 0) return { updated: 0 };
+      const paths = await this.store.putLinksBulk(records);
+      await this.repo.commit(paths, `tag: delete ${tag}`);
+      this.schedulePush();
+      return { updated: records.length };
+    });
+  }
+
+  // ---------------------------------------------------------------- 链接检查
+
+  async checkLinks(ids?: string[]): Promise<{ checked: number; dead: number }> {
+    const explicit = ids && ids.length > 0;
+    const candidates: LinkRecord[] = explicit
+      ? ids
+          .map((id) => this.store.findById(id))
+          .filter((link): link is LinkRecord => Boolean(link))
+      : [...this.store.links.values()];
+    const targets = candidates.filter((link) => link.kind !== 'file');
+    if (targets.length === 0) throw new HttpError(400, '没有可检查的链接');
+    if (targets.length > 500) throw new HttpError(400, '单次最多检查 500 条链接');
+
+    const results: Array<{ id: string; status: number | null; dead: boolean; error: string | null }> =
+      [];
+    let cursor = 0;
+    const checkOne = async (link: LinkRecord): Promise<void> => {
+      try {
+        assertAllowedUrl(link.url, this.config.allowPrivateUrls);
+      } catch {
+        results.push({ id: link.id, status: null, dead: false, error: 'blocked' });
+        return;
+      }
+      const blockedStatuses = [401, 403, 405, 429];
+      const judge = (status: number): void => {
+        results.push({
+          id: link.id,
+          status,
+          dead: !blockedStatuses.includes(status) && status >= 400,
+          error: null,
+        });
+      };
+      try {
+        const res = await fetch(link.url, {
+          method: 'HEAD',
+          redirect: 'follow',
+          signal: AbortSignal.timeout(10000),
+          headers: { 'user-agent': USER_AGENT },
+        });
+        judge(res.status);
+      } catch {
+        try {
+          const res = await fetch(link.url, {
+            method: 'GET',
+            redirect: 'follow',
+            signal: AbortSignal.timeout(10000),
+            headers: { 'user-agent': USER_AGENT, range: 'bytes=0-0' },
+          });
+          judge(res.status);
+        } catch (err) {
+          results.push({
+            id: link.id,
+            status: null,
+            dead: true,
+            error: (err as Error).message.slice(0, 200),
+          });
+        }
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(6, targets.length) }, async () => {
+      while (cursor < targets.length) {
+        const link = targets[cursor++];
+        if (!link) break;
+        await checkOne(link);
+      }
+    });
+    await Promise.all(workers);
+
+    return this.mutex.run(async () => {
+      const now = new Date().toISOString();
+      const updated: LinkRecord[] = [];
+      for (const result of results) {
+        const link = this.store.findById(result.id);
+        if (!link) continue;
+        updated.push({
+          ...link,
+          httpStatus: result.status,
+          isDead: result.dead,
+          checkError: result.error,
+          lastCheckedAt: now,
+          updatedAt: now,
+        });
+      }
+      if (updated.length === 0) return { checked: 0, dead: 0 };
+      const paths = await this.store.putLinksBulk(updated);
+      const dead = updated.filter((link) => link.isDead).length;
+      await this.repo.commit(paths, `check: ${dead} dead of ${updated.length} links`);
+      this.schedulePush();
+      return { checked: updated.length, dead };
+    });
+  }
+
+  // ---------------------------------------------------------------- Markdown 导出
+
+  exportMarkdown(): string {
+    const collections = [...this.store.collections.values()];
+    const nameOf = (id: string | null | undefined): string =>
+      collections.find((item) => item.id === id)?.name ?? 'Uncategorized';
+    const groups = new Map<string, LinkRecord[]>();
+    for (const link of this.store.links.values()) {
+      const key = link.collectionId ?? '__none__';
+      const list = groups.get(key) ?? [];
+      list.push(link);
+      groups.set(key, list);
+    }
+
+    const lines: string[] = ['# RepoMarks export', '', `Generated: ${new Date().toISOString()}`, ''];
+    const ordered = [...groups.entries()].sort(([a], [b]) => nameOf(a).localeCompare(nameOf(b)));
+    for (const [key, links] of ordered) {
+      lines.push(`## ${nameOf(key === '__none__' ? null : key)}`, '');
+      for (const link of links.sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+        const tags = link.tags.map((tag) => `#${tag}`).join(' ');
+        const meta = [link.createdAt.slice(0, 10), tags].filter(Boolean).join(' · ');
+        lines.push(`- [${link.title}](${link.url})${meta ? ` — ${meta}` : ''}`);
+        if (link.description) lines.push(`  > ${link.description.replace(/\s+/g, ' ')}`);
+        if (link.notes) lines.push(`  > ${link.notes.replace(/\s+/g, ' ')}`);
+        for (const highlight of link.highlights ?? []) {
+          lines.push(`  - 「${highlight.text.replace(/\s+/g, ' ')}」${highlight.note ? ` — ${highlight.note.replace(/\s+/g, ' ')}` : ''}`);
+        }
+      }
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  /** 生成 index/*.md 收藏夹索引并提交到仓库 */
+  async generateIndexes(): Promise<{ files: number }> {
+    return this.mutex.run(async () => {
+      const dir = 'index';
+      const existing = new Set(
+        (fs.existsSync(this.store.abs(dir)) ? fs.readdirSync(this.store.abs(dir)) : []).filter(
+          (name) => name.endsWith('.md')
+        )
+      );
+      const slugify = (value: string, fallback: string): string => {
+        const slug = value
+          .toLowerCase()
+          .replace(/[^\da-z]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 40);
+        return slug || fallback;
+      };
+
+      const groups = new Map<string, { name: string; links: LinkRecord[] }>();
+      for (const collection of this.store.collections.values()) {
+        groups.set(collection.id, { name: collection.name, links: [] });
+      }
+      const uncategorized: LinkRecord[] = [];
+      for (const link of this.store.links.values()) {
+        const group = link.collectionId ? groups.get(link.collectionId) : undefined;
+        if (group) group.links.push(link);
+        else uncategorized.push(link);
+      }
+
+      const written = new Set<string>();
+      const paths: string[] = [];
+      const master: string[] = ['# Collections', ''];
+
+      const writeGroup = async (key: string, name: string, links: LinkRecord[]): Promise<void> => {
+        const filename = `${slugify(name, 'collection')}-${key.slice(-6)}.md`;
+        const lines = [`# ${name}`, '', `${links.length} links · generated by RepoMarks`, ''];
+        for (const link of links.sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+          const tags = link.tags.map((tag) => `#${tag}`).join(' ');
+          lines.push(`- [${link.title}](${link.url})${tags ? ` — ${tags}` : ''}`);
+        }
+        lines.push('');
+        await this.store.writeTextFile(`${dir}/${filename}`, lines.join('\n'));
+        written.add(filename);
+        paths.push(`${dir}/${filename}`);
+        master.push(`- [${name}](${encodeURIComponent(filename)}) — ${links.length} links`);
+      };
+
+      for (const [id, group] of groups) {
+        if (group.links.length === 0) continue;
+        await writeGroup(id, group.name, group.links);
+      }
+      if (uncategorized.length > 0) {
+        await writeGroup('uncategorized', 'Uncategorized', uncategorized);
+      }
+      await this.store.writeTextFile(`${dir}/README.md`, `${master.join('\n')}\n`);
+      written.add('README.md');
+      paths.push(`${dir}/README.md`);
+
+      for (const name of existing) {
+        if (!written.has(name)) {
+          await fsp.rm(this.store.abs(`${dir}/${name}`), { force: true });
+          paths.push(`${dir}/${name}`);
+        }
+      }
+
+      await this.repo.commit(paths, `index: regenerate markdown indexes (${written.size} files)`);
+      this.schedulePush();
+      return { files: written.size };
+    });
   }
 
   // ---------------------------------------------------------------- 批量操作

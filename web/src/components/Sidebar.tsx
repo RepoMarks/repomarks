@@ -278,6 +278,14 @@ export default function Sidebar({ open }: { open: boolean }) {
                 </button>
               ))}
             </div>
+            <button
+              className="nav-item"
+              onClick={() => navigate('/tags')}
+              style={location.pathname === '/tags' ? { background: 'var(--accent-soft)' } : undefined}
+            >
+              <span className="nav-dot" style={{ background: '#c96f3c' }} />
+              {t('标签管理')}
+            </button>
           </section>
         )}
       </div>

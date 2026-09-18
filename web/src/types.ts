@@ -34,6 +34,10 @@ export interface LinkRecord {
   filePath?: string | null;
   fileName?: string | null;
   fileType?: string | null;
+  lastCheckedAt?: string | null;
+  httpStatus?: number | null;
+  isDead?: boolean | null;
+  checkError?: string | null;
 }
 
 export interface Highlight {

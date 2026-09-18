@@ -175,6 +175,14 @@ export function createRouter(service: DataService, auth: Auth): Router {
   );
 
   router.post(
+    '/links/check',
+    wrap(async (req, res) => {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
+      res.json(await service.checkLinks(ids));
+    })
+  );
+
+  router.post(
     '/links/upload',
     wrap(async (req, res) => {
       const record = await service.addFileLink({
@@ -394,6 +402,33 @@ export function createRouter(service: DataService, auth: Auth): Router {
     })
   );
 
+  router.patch(
+    '/tags/:tag',
+    wrap(async (req, res) => {
+      const result = await service.renameTag(req.params.tag, requireString(req.body?.name, 'name'));
+      res.json(result);
+    })
+  );
+
+  router.delete(
+    '/tags/:tag',
+    wrap(async (req, res) => {
+      res.json(await service.deleteTag(req.params.tag));
+    })
+  );
+
+  router.post(
+    '/tags/merge',
+    wrap(async (req, res) => {
+      res.json(
+        await service.renameTag(
+          requireString(req.body?.source, 'source'),
+          requireString(req.body?.target, 'target')
+        )
+      );
+    })
+  );
+
   // ------------------------------------------------------------ API 密钥
 
   router.get(
@@ -436,9 +471,37 @@ export function createRouter(service: DataService, auth: Auth): Router {
 
   router.get(
     '/export',
-    wrap(async (_req, res) => {
+    wrap(async (req, res) => {
+      if (str(req.query.format) === 'markdown') {
+        res.setHeader('content-type', 'text/markdown; charset=utf-8');
+        res.setHeader('content-disposition', 'attachment; filename="repomarks-export.md"');
+        res.send(service.exportMarkdown());
+        return;
+      }
       res.setHeader('content-disposition', 'attachment; filename="repomarks-export.json"');
       res.json(await service.exportData());
+    })
+  );
+
+  router.post(
+    '/maintenance/indexes',
+    wrap(async (_req, res) => {
+      res.json(await service.generateIndexes());
+    })
+  );
+
+  router.get(
+    '/health',
+    wrap((_req, res) => {
+      const stats = service.store.stats();
+      res.json({
+        status: service.syncState.lastError ? 'degraded' : 'ok',
+        uptimeSeconds: Math.round(process.uptime()),
+        links: stats.links,
+        lastSyncAt: service.syncState.lastSyncAt,
+        pendingPush: service.syncState.pendingPush,
+        lastError: service.syncState.lastError,
+      });
     })
   );
 

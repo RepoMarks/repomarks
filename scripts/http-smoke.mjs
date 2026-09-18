@@ -306,6 +306,68 @@ try {
   if (!pinned.data.tags.includes('bulk-test')) fail('bulk tags not applied');
   console.log('16b. bulk actions ok');
 
+  const health = await fetch(`${baseUrl}/api/health`);
+  const healthJson = await health.json();
+  if (health.status !== 200 || !healthJson.status) fail('health endpoint failed');
+  console.log('16c. health endpoint ok');
+
+  const renamed = await req('/api/tags/demo', {
+    method: 'PATCH',
+    body: JSON.stringify({ name: 'demo-renamed' }),
+  });
+  if (renamed.res.status !== 200 || renamed.data.updated < 1) {
+    fail(`tag rename failed: ${renamed.text}`);
+  }
+  const tagsAfter = await req('/api/tags');
+  if (!tagsAfter.data.some((item) => item.tag === 'demo-renamed')) fail('renamed tag missing');
+  const deletedTag = await req('/api/tags/demo-renamed', { method: 'DELETE' });
+  if (deletedTag.data.updated < 1) fail('tag delete failed');
+  console.log('16d. tag rename + delete ok');
+
+  const checked = await req('/api/links/check', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [link.id] }),
+  });
+  if (checked.res.status !== 200 || checked.data.checked !== 1) {
+    fail(`link check failed: ${checked.text}`);
+  }
+  const checkedLink = await req(`/api/links/${link.id}`);
+  if (!checkedLink.data.lastCheckedAt) fail('check state missing');
+  console.log(
+    `16e. link checker ok (httpStatus=${checkedLink.data.httpStatus}, dead=${checkedLink.data.isDead})`
+  );
+
+  const markdown = await fetch(`${baseUrl}/api/export?format=markdown`, {
+    headers: { cookie },
+  });
+  const markdownText = await markdown.text();
+  if (markdown.status !== 200 || !markdownText.includes('# RepoMarks export')) {
+    fail('markdown export failed');
+  }
+  console.log('16f. markdown export ok');
+
+  const indexes = await req('/api/maintenance/indexes', { method: 'POST' });
+  if (indexes.res.status !== 200 || indexes.data.files < 1) {
+    fail(`index generation failed: ${indexes.text}`);
+  }
+  console.log(`16g. markdown indexes ok (${indexes.data.files} files)`);
+
+  const pinnedSearch = await req('/api/links?q=is:pinned');
+  if (pinnedSearch.data.total < 1) fail('is:pinned search failed');
+  const siteSearch = await req('/api/links?q=site:example.com');
+  if (siteSearch.data.total < 1) fail('site: search failed');
+  console.log('16h. search syntax ok');
+
+  const dupEn = await req('/api/links', {
+    method: 'POST',
+    body: JSON.stringify({ url: 'https://example.com', fetchMetadata: false }),
+    headers: { 'x-ui-language': 'en' },
+  });
+  if (dupEn.res.status !== 409 || dupEn.data.error !== 'This link already exists') {
+    fail(`server error i18n failed: ${dupEn.text}`);
+  }
+  console.log('16i. server error i18n ok');
+
   const logout = await req('/api/auth/logout', { method: 'POST' });
   if (logout.res.status !== 200) fail('logout failed');
   cookie = '';

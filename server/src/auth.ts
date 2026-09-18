@@ -133,7 +133,11 @@ export class Auth {
       next();
       return;
     }
-    if (path === '/api/auth/login' || path === '/api/auth/session') {
+    if (
+      path === '/api/auth/login' ||
+      path === '/api/auth/session' ||
+      path === '/api/health'
+    ) {
       next();
       return;
     }

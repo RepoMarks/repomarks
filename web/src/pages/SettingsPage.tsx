@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
   const [keyLabel, setKeyLabel] = useState('');
   const [newKey, setNewKey] = useState<string | null>(null);
+  const [indexMessage, setIndexMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -138,6 +139,9 @@ export default function SettingsPage() {
               </button>
               <a className="btn" href="/api/export">
                 {t('导出 JSON')}
+              </a>
+              <a className="btn" href="/api/export?format=markdown">
+                {t('导出 Markdown')}
               </a>
             </div>
             {message && (
@@ -320,6 +324,25 @@ export default function SettingsPage() {
               {t(
                 '直接编辑文件后提交推送，服务会自动拉取并加载；两端同时修改时按 id 合并，更新时间较新的记录优先。'
               )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+              <button
+                className="btn"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const result = await api.generateIndexes();
+                      setIndexMessage(t('已生成 {files} 个索引文件', { files: result.files }));
+                      notifyChange();
+                    } catch (err) {
+                      window.alert((err as Error).message);
+                    }
+                  })();
+                }}
+              >
+                {t('生成 Markdown 索引')}
+              </button>
+              {indexMessage && <span className="field-hint">{indexMessage}</span>}
             </div>
           </div>
 

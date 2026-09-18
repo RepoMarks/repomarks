@@ -7,6 +7,7 @@ import type { Auth } from '../auth.js';
 import type { DataService } from '../services/service.js';
 import { createRouter } from './routes.js';
 import { createPublicRouter } from './public.js';
+import { translateServerMessage } from './errors-i18n.js';
 import { HttpError } from '../util/misc.js';
 import { logger } from '../logger.js';
 
@@ -54,15 +55,18 @@ export function createApp(config: Config, service: DataService, auth: Auth): Exp
     res.status(404).json({ error: 'Not Found' });
   });
 
-  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+    const language = req.header('x-ui-language') ?? req.header('accept-language');
     if (err instanceof HttpError) {
-      res.status(err.status).json({ error: err.message });
+      res.status(err.status).json({ error: translateServerMessage(err.message, language) });
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`请求处理失败: ${message}`);
     if (err instanceof Error && err.stack) logger.debug(err.stack);
-    res.status(500).json({ error: '服务器内部错误' });
+    res.status(500).json({
+      error: translateServerMessage('服务器内部错误', language),
+    });
   };
   app.use(errorHandler);
 

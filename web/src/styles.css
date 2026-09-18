@@ -578,6 +578,13 @@ textarea {
   padding-top: 6px;
 }
 
+mark {
+  background: rgba(245, 215, 110, 0.35);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
 .mini-tag {
   font-size: 11.5px;
   color: var(--muted);

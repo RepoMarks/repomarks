@@ -45,6 +45,7 @@ export default function HomePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [checking, setChecking] = useState(false);
   const requestId = useRef(0);
   const uploadInput = useRef<HTMLInputElement>(null);
 
@@ -138,6 +139,30 @@ export default function HomePage() {
 
   const hasFilter = Boolean(q || collectionId || tag || archived);
   const activeCollection = collections.find((item) => item.id === collectionId);
+  const highlightTerms = q
+    .split(/\s+/)
+    .filter((term) => term && !term.includes(':'))
+    .map((term) => term.toLowerCase());
+
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      const result = await api.checkLinks(selected.size > 0 ? [...selected] : undefined);
+      window.alert(
+        t('检查完成：{checked} 条链接，{dead} 条失效', {
+          checked: result.checked,
+          dead: result.dead,
+        })
+      );
+      exitSelectMode();
+      notifyChange();
+      load();
+    } catch (err) {
+      window.alert((err as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const toggleSelect = (id: string) => {
     setSelected((previous) => {
@@ -196,6 +221,7 @@ export default function HomePage() {
           <input
             value={searchInput}
             placeholder={t('搜索标题、网址、描述、标签…')}
+            title={t('搜索支持 site:、after:、before:、is:pinned、is:dead、is:archived')}
             onChange={(event) => setSearchInput(event.target.value)}
           />
           {loading && <span className="spinner" />}
@@ -323,6 +349,9 @@ export default function HomePage() {
             >
               {t('抓取存档')}
             </button>
+            <button className="btn small" disabled={checking} onClick={() => void runCheck()}>
+              {checking ? t('检查中…') : t('检查链接')}
+            </button>
             <button
               className="btn small danger"
               disabled={selected.size === 0}
@@ -377,6 +406,7 @@ export default function HomePage() {
                 selectable={selectMode}
                 selected={selected.has(link.id)}
                 onSelectToggle={toggleSelect}
+                highlight={highlightTerms}
                 onChanged={() => {
                   load();
                   notifyChange();

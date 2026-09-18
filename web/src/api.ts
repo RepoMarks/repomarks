@@ -33,6 +33,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options,
       headers: {
         'content-type': 'application/json',
+        'x-ui-language': document.documentElement.lang === 'en' ? 'en' : 'zh',
         ...(options.headers ?? {}),
       },
     });
@@ -188,6 +189,30 @@ export const api = {
     request<{ ok: boolean }>(`/collections/${id}`, { method: 'DELETE' }),
 
   tags: () => request<TagCount[]>('/tags'),
+
+  renameTag: (tag: string, name: string) =>
+    request<{ updated: number }>(`/tags/${encodeURIComponent(tag)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteTag: (tag: string) =>
+    request<{ updated: number }>(`/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' }),
+
+  mergeTags: (source: string, target: string) =>
+    request<{ updated: number }>('/tags/merge', {
+      method: 'POST',
+      body: JSON.stringify({ source, target }),
+    }),
+
+  checkLinks: (ids?: string[]) =>
+    request<{ checked: number; dead: number }>('/links/check', {
+      method: 'POST',
+      body: JSON.stringify(ids && ids.length > 0 ? { ids } : {}),
+    }),
+
+  generateIndexes: () =>
+    request<{ files: number }>('/maintenance/indexes', { method: 'POST' }),
 
   listApiKeys: () => request<import('./types').ApiKeyInfo[]>('/apikeys'),
 

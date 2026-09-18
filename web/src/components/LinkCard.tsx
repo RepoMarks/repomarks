@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, faviconSrc, fileUrl, formatBytes, hostnameOf } from '../api';
 import { useI18n } from '../i18n';
+import Highlight from './Highlight';
 import type { Collection, LinkRecord } from '../types';
 
 interface LinkCardProps {
@@ -11,6 +12,7 @@ interface LinkCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelectToggle?: (id: string) => void;
+  highlight?: string[];
 }
 
 function ArchiveBadge({ link }: { link: LinkRecord }) {
@@ -49,6 +51,7 @@ export default function LinkCard({
   selectable = false,
   selected = false,
   onSelectToggle,
+  highlight,
 }: LinkCardProps) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -129,8 +132,14 @@ export default function LinkCard({
               </span>
             )}
           </div>
-          <h3 className="card-title">{link.title}</h3>
-          {link.description && <p className="card-desc">{link.description}</p>}
+          <h3 className="card-title">
+            <Highlight text={link.title} terms={highlight} />
+          </h3>
+          {link.description && (
+            <p className="card-desc">
+              <Highlight text={link.description} terms={highlight} />
+            </p>
+          )}
           {link.tags.length > 0 && (
             <div className="card-tags">
               {link.tags.slice(0, 5).map((tag) => (
@@ -144,6 +153,11 @@ export default function LinkCard({
       </Link>
       <div className="card-actions">
         <ArchiveBadge link={link} />
+        {link.isDead && (
+          <span className="badge failed" title={link.checkError ?? `HTTP ${link.httpStatus ?? '-'}`}>
+            {t('已失效')}
+          </span>
+        )}
         <span className="spacer" />
         <a
           className="icon-btn"

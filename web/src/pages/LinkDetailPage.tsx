@@ -46,6 +46,8 @@ export default function LinkDetailPage() {
   const [aiResult, setAiResult] = useState<{ tags: string[]; summary: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [markdownCopied, setMarkdownCopied] = useState(false);
   const archiveInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
@@ -100,6 +102,41 @@ export default function LinkDetailPage() {
     });
     if (!dataUrl) return;
     await run(() => api.uploadArchive(link.id, format, dataUrl.slice(dataUrl.indexOf(',') + 1)));
+  };
+
+  const checkLink = async () => {
+    if (!link) return;
+    setChecking(true);
+    try {
+      await api.checkLinks([link.id]);
+      load();
+    } catch (err) {
+      window.alert((err as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const copyMarkdown = async () => {
+    if (!link) return;
+    const lines: string[] = [`# ${link.title}`, '', `- URL: ${link.url}`];
+    if (link.tags.length > 0) lines.push(`- Tags: ${link.tags.map((tag) => `#${tag}`).join(' ')}`);
+    if (link.description) lines.push('', link.description);
+    if (link.notes) lines.push('', link.notes);
+    for (const highlight of link.highlights ?? []) {
+      lines.push(
+        '',
+        `> ${highlight.text}${highlight.note ? ` — ${highlight.note}` : ''}`
+      );
+    }
+    const markdown = `${lines.join('\n')}\n`;
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setMarkdownCopied(true);
+      window.setTimeout(() => setMarkdownCopied(false), 2000);
+    } catch {
+      window.prompt('Markdown', markdown);
+    }
   };
 
   const runAi = async () => {
@@ -303,6 +340,12 @@ export default function LinkDetailPage() {
             )}
             <button className="btn" onClick={() => archiveInput.current?.click()}>
               {t('上传存档')}
+            </button>
+            <button className="btn" disabled={checking} onClick={() => void checkLink()}>
+              {checking ? t('检查中…') : t('检查链接')}
+            </button>
+            <button className="btn" onClick={() => void copyMarkdown()}>
+              {markdownCopied ? t('已复制') : t('复制 Markdown')}
             </button>
             <input
               ref={archiveInput}
@@ -588,6 +631,19 @@ export default function LinkDetailPage() {
               </dd>
               <dt>{t('站点')}</dt>
               <dd>{link.siteName ?? hostnameOf(link.url)}</dd>
+              <dt>{t('HTTP 状态')}</dt>
+              <dd>
+                {link.httpStatus ?? '-'}
+                {link.isDead ? ` · ${t('已失效')}` : ''}
+              </dd>
+              <dt>{t('最近检查')}</dt>
+              <dd>{link.lastCheckedAt ? formatDate(link.lastCheckedAt) : '-'}</dd>
+              {link.checkError && (
+                <>
+                  <dt>{t('检查错误')}</dt>
+                  <dd style={{ color: '#ff9aa6' }}>{link.checkError}</dd>
+                </>
+              )}
               <dt>{t('添加时间')}</dt>
               <dd>{formatDate(link.createdAt)}</dd>
               <dt>{t('更新时间')}</dt>
