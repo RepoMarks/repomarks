@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { GitRepo } from '../src/git/repo.js';
 import { DataService } from '../src/services/service.js';
 import { loadConfig } from '../src/config.js';
+import { HttpError } from '../src/util/misc.js';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -36,6 +37,14 @@ async function main(): Promise<void> {
     fetchMetadata: false,
   });
   console.log('added link:', link.id, link.title);
+
+  try {
+    await a.addLink({ url: 'http://127.0.0.1:1234', fetchMetadata: false });
+    throw new Error('内网地址未被拦截');
+  } catch (err) {
+    if (!(err instanceof HttpError) || err.status !== 400) throw err;
+  }
+  console.log('SSRF guard ok');
 
   const collection = await a.createCollection({ name: '技术' });
   await a.updateLink(link.id, { collectionId: collection.id, description: '一条测试链接' });

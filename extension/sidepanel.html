@@ -4,11 +4,14 @@
   <meta charset="utf-8">
   <title>RepoMarks</title>
   <link rel="stylesheet" href="popup.css">
+  <style>
+    body { width: 100%; min-width: 300px; }
+  </style>
 </head>
 <body>
   <header>
     <span class="brand">RepoMarks</span>
-    <span class="hint">Ctrl+Shift+S</span>
+    <span class="hint">Side panel</span>
   </header>
 
   <section id="setup" hidden>
@@ -27,7 +30,7 @@
     <input id="tags" type="text" placeholder="comma, separated">
 
     <label for="description">Description <span class="optional">(optional)</span></label>
-    <textarea id="description" rows="2"></textarea>
+    <textarea id="description" rows="3"></textarea>
 
     <label for="collection">Collection</label>
     <select id="collection"></select>
@@ -42,7 +45,6 @@
 
   <footer>
     <a id="open-app" href="#" target="_blank" rel="noreferrer">Open RepoMarks</a>
-    <button id="open-side-panel" type="button" class="link-button">Side panel</button>
   </footer>
 
   <script src="popup.js"></script>

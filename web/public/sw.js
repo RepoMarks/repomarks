@@ -1,5 +1,5 @@
 const CACHE = 'repomarks-v1';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -38,7 +38,9 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html').then((hit) => hit ?? Response.error()))
+      fetch(request).catch(() =>
+        caches.match('./index.html').then((hit) => hit ?? Response.error())
+      )
     );
     return;
   }

@@ -122,22 +122,14 @@ export class Auth {
     entry.count++;
   }
 
+  /** 挂载在 API 根路径上：豁免登录/会话/健康检查，其余接口需要会话或 API 密钥 */
   middleware = (req: Request, res: Response, next: NextFunction): void => {
     const path = req.path;
-    // 前端静态资源不需要登录，由页面自行展示登录框
-    if (!path.startsWith('/api')) {
-      next();
-      return;
-    }
     if (!this.enabled) {
       next();
       return;
     }
-    if (
-      path === '/api/auth/login' ||
-      path === '/api/auth/session' ||
-      path === '/api/health'
-    ) {
+    if (path === '/auth/login' || path === '/auth/session' || path === '/health') {
       next();
       return;
     }

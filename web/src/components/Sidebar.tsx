@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, apiUrl } from '../api';
 import { useApp } from '../App';
 import { useCollections, useStatus, useTags } from '../hooks';
 import { useI18n } from '../i18n';
@@ -59,7 +59,7 @@ function CollectionTree({
                 {collection.icon ? (
                   <img
                     className="nav-icon"
-                    src={`/api/favicon?url=${encodeURIComponent(collection.icon)}`}
+                    src={`${apiUrl('/favicon')}?url=${encodeURIComponent(collection.icon)}`}
                     alt=""
                   />
                 ) : (

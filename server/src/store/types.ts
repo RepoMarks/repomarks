@@ -39,6 +39,8 @@ export interface LinkRecord {
   isDead?: boolean | null;
   checkError?: string | null;
   readAt?: string | null;
+  /** 搜索命中的正文摘要（仅搜索结果中返回，不写入仓库） */
+  snippet?: string;
 }
 
 export interface Highlight {
@@ -59,6 +61,7 @@ export interface Collection {
   slug?: string;
   description?: string;
   passwordHash?: string;
+  hasPassword?: boolean;
   shareExpiresAt?: string | null;
   feedUrl?: string;
   feedLastFetchedAt?: string | null;

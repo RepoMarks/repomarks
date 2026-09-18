@@ -26,14 +26,16 @@ Smoke coverage: `16c`–`16i` in `scripts/http-smoke.mjs`.
 
 Smoke coverage: `16j`–`16n` in `scripts/http-smoke.mjs`.
 
-## Batch 3 — Integrations
+## Batch 3 — Integrations ✅ (released)
 
-- [ ] Full-text search inside preserved pages (index stored in the repo)
-- [ ] Floccus-compatible API for browser bookmark sync
-- [ ] Browser extension: side panel, save selected text as a highlight, keyboard shortcut
-- [ ] Encrypted public shares (password + expiry)
-- [ ] `BASE_PATH` support for reverse-proxy sub-paths
-- [ ] External RSS feeds mirrored into a collection
+- [x] Full-text search inside preserved pages — `index/search.jsonl` stored in the repo, in-memory match + snippets, rebuild endpoint
+- [x] Linkwarden-compatible API (`/api/v1/*`) for Floccus and other clients (Bearer API key)
+- [x] Browser extension: side panel, "save selection as highlight" context menu, existing keyboard shortcut
+- [x] Encrypted public shares — scrypt password + expiry, cookie-based unlock, form page
+- [x] `BASE_PATH` support for reverse-proxy sub-paths (server mount + `VITE_BASE_PATH` build)
+- [x] External RSS feeds mirrored into a collection (`feedUrl`, manual sync + `FEED_SYNC_INTERVAL_HOURS`)
+
+Smoke coverage: `16o`–`16r` in `scripts/http-smoke.mjs`, plus the standalone base-path check.
 
 ## Batch 4 — Differentiators
 

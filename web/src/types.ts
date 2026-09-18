@@ -39,6 +39,7 @@ export interface LinkRecord {
   isDead?: boolean | null;
   checkError?: string | null;
   readAt?: string | null;
+  snippet?: string;
 }
 
 export interface Highlight {

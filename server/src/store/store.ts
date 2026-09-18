@@ -30,10 +30,14 @@ export class LinkStore {
 
   private shards: ShardInfo[] = [];
   private linkShardIndex = new Map<string, string>();
+  private searchText = new Map<string, string>();
+  private searchTextLower = new Map<string, string>();
+  private searchIndexLines = 0;
 
   constructor(
     private dir: string,
-    private shardSize: number
+    private shardSize: number,
+    private fulltextMaxChars = 2000
   ) {}
 
   get directory(): string {
@@ -76,7 +80,87 @@ export class LinkStore {
     await this.loadCollections();
     await this.loadApiKeys();
     await this.loadShards();
+    await this.loadSearchIndex();
     return created;
+  }
+
+  private async loadSearchIndex(): Promise<void> {
+    this.searchText.clear();
+    this.searchTextLower.clear();
+    this.searchIndexLines = 0;
+    const file = path.join(this.dir, 'index', 'search.jsonl');
+    if (!fs.existsSync(file)) return;
+    const raw = await fsp.readFile(file, 'utf8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      this.searchIndexLines++;
+      try {
+        const entry = JSON.parse(line) as { id?: string; text?: string };
+        if (!entry.id) continue;
+        if (!entry.text) {
+          this.searchText.delete(entry.id);
+          this.searchTextLower.delete(entry.id);
+          continue;
+        }
+        this.searchText.set(entry.id, entry.text);
+        this.searchTextLower.set(entry.id, entry.text.toLowerCase());
+      } catch {
+        /* 跳过损坏行 */
+      }
+    }
+  }
+
+  /** 写入/更新某条链接的正文索引；必要时压缩索引文件。返回变更文件路径 */
+  async appendSearchText(id: string, text: string): Promise<string> {
+    const rel = 'index/search.jsonl';
+    const clipped = text.slice(0, this.fulltextMaxChars);
+    if (clipped) {
+      this.searchText.set(id, clipped);
+      this.searchTextLower.set(id, clipped.toLowerCase());
+    } else {
+      this.searchText.delete(id);
+      this.searchTextLower.delete(id);
+    }
+    if (this.searchIndexLines > this.searchText.size * 1.5 + 50) {
+      await this.saveSearchIndex();
+      return rel;
+    }
+    await fsp.mkdir(path.dirname(this.abs(rel)), { recursive: true });
+    await fsp.appendFile(this.abs(rel), `${JSON.stringify({ id, text: clipped })}\n`, 'utf8');
+    this.searchIndexLines++;
+    return rel;
+  }
+
+  /** 索引压缩写盘 */
+  async saveSearchIndex(): Promise<string[]> {
+    const rel = 'index/search.jsonl';
+    const lines = [...this.searchText.entries()].map(([id, text]) =>
+      JSON.stringify({ id, text })
+    );
+    await this.atomicWrite(rel, lines.length > 0 ? `${lines.join('\n')}\n` : '');
+    this.searchIndexLines = lines.length;
+    return [rel];
+  }
+
+  hasSearchText(id: string): boolean {
+    return this.searchTextLower.has(id);
+  }
+
+  /** 用给定内容整体替换全文索引（重建时使用） */
+  async replaceSearchIndex(entries: Array<[string, string]>): Promise<string[]> {
+    this.searchText.clear();
+    this.searchTextLower.clear();
+    for (const [id, text] of entries) {
+      const clipped = text.slice(0, this.fulltextMaxChars);
+      if (!clipped) continue;
+      this.searchText.set(id, clipped);
+      this.searchTextLower.set(id, clipped.toLowerCase());
+    }
+    return this.saveSearchIndex();
+  }
+
+  getSearchText(id: string): string | undefined {
+    return this.searchText.get(id);
   }
 
   private async loadApiKeys(): Promise<void> {
@@ -285,6 +369,9 @@ export class LinkStore {
       await this.rewriteShard(shardName);
     }
     changed.push(this.shardRel(shardName));
+    if (this.searchTextLower.has(id)) {
+      changed.push(await this.appendSearchText(id, ''));
+    }
     return changed;
   }
 
@@ -397,7 +484,8 @@ export class LinkStore {
         const haystack = `${link.title}\n${link.url}\n${link.description ?? ''}\n${
           link.siteName ?? ''
         }\n${link.tags.join(' ')}\n${link.notes ?? ''}\n${highlights}`.toLowerCase();
-        return tokens.every((token) => haystack.includes(token));
+        const fulltext = this.searchTextLower.get(link.id) ?? '';
+        return tokens.every((token) => haystack.includes(token) || fulltext.includes(token));
       });
     }
 
@@ -418,7 +506,29 @@ export class LinkStore {
     const perPage = Math.min(Math.max(query.perPage ?? 50, 1), 500);
     const page = Math.max(query.page ?? 1, 1);
     const start = (page - 1) * perPage;
-    return { items: items.slice(start, start + perPage), total, page, perPage };
+    const pageItems = items.slice(start, start + perPage).map((link) => {
+      if (tokens.length === 0) return link;
+      const text = this.searchText.get(link.id);
+      if (!text) return link;
+      const lower = text.toLowerCase();
+      let index = -1;
+      let token = '';
+      for (const candidate of tokens) {
+        const found = lower.indexOf(candidate);
+        if (found !== -1 && (index === -1 || found < index)) {
+          index = found;
+          token = candidate;
+        }
+      }
+      if (index === -1) return link;
+      const snippetStart = Math.max(0, index - 60);
+      const snippetEnd = Math.min(text.length, index + token.length + 60);
+      const snippet = `${snippetStart > 0 ? '…' : ''}${text
+        .slice(snippetStart, snippetEnd)
+        .replace(/\s+/g, ' ')}${snippetEnd < text.length ? '…' : ''}`;
+      return { ...link, snippet };
+    });
+    return { items: pageItems, total, page, perPage };
   }
 
   findById(id: string): LinkRecord | undefined {

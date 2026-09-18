@@ -243,6 +243,9 @@ export const EN_TRANSLATIONS: Record<string, string> = {
   '确定删除该格式的存档吗？': 'Delete this saved format?',
   'RSS 订阅源': 'RSS feed URL',
   '立即同步订阅': 'Sync feed now',
+  '订阅同步完成：新增 {added} 条，跳过 {skipped} 条':
+    'Feed synced: {added} added, {skipped} skipped',
+  '清除密码': 'Clear password',
   '分享密码': 'Share password',
   '密码留空表示不需要密码': 'Leave empty for no password',
   '有效期至': 'Expires at',

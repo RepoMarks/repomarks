@@ -14,7 +14,9 @@ async function main(): Promise<void> {
 
   const app = createApp(config, service, auth);
   const server = app.listen(config.port, config.host, () => {
-    logger.info(`RepoMarks 已启动: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
+    logger.info(
+      `RepoMarks 已启动: http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}${config.basePath}`
+    );
     logger.info(`数据仓库: ${service.repo.remoteUrl} (本地目录 ${config.dataDir})`);
     const stats = service.store.stats();
     logger.info(`当前数据: ${stats.links} 条链接 / ${stats.collections} 个收藏夹 / ${stats.archived} 个存档`);
@@ -29,6 +31,18 @@ async function main(): Promise<void> {
     const initial = setTimeout(refresh, 90_000);
     initial.unref?.();
     const interval = setInterval(refresh, 24 * 60 * 60 * 1000);
+    interval.unref?.();
+  }
+
+  if (config.feedSyncIntervalHours > 0) {
+    const interval = setInterval(
+      () => {
+        void service
+          .syncAllFeeds()
+          .catch((err) => logger.warn(`RSS 同步失败: ${(err as Error).message}`));
+      },
+      config.feedSyncIntervalHours * 60 * 60 * 1000
+    );
     interval.unref?.();
   }
 

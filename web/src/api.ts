@@ -25,11 +25,13 @@ export class ApiError extends Error {
 }
 
 const UNAUTHORIZED_EVENT = 'repomarks:unauthorized';
+const BASE_URL = import.meta.env.BASE_URL ?? '/';
+const API_PREFIX = `${BASE_URL.replace(/\/$/, '')}/api`;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${API_PREFIX}${path}`, {
       credentials: 'same-origin',
       ...options,
       headers: {
@@ -183,6 +185,9 @@ export const api = {
       icon?: string;
       isPublic?: boolean;
       description?: string;
+      password?: string;
+      shareExpiresAt?: string | null;
+      feedUrl?: string;
     }
   ) =>
     request<Collection>(`/collections/${id}`, {
@@ -208,6 +213,11 @@ export const api = {
     request<{ updated: number }>('/tags/merge', {
       method: 'POST',
       body: JSON.stringify({ source, target }),
+    }),
+
+  syncFeed: (id: string) =>
+    request<{ added: number; skipped: number; title?: string }>(`/collections/${id}/feed/sync`, {
+      method: 'POST',
     }),
 
   moveCollection: (id: string, direction: 'up' | 'down') =>
@@ -256,23 +266,27 @@ export const api = {
 };
 
 export function fileUrl(id: string): string {
-  return `/api/links/${id}/file`;
+  return `${API_PREFIX}/links/${id}/file`;
 }
 
 export function archiveFormatUrl(
   id: string,
   format: 'html' | 'readable' | 'screenshot' | 'pdf'
 ): string {
-  return `/api/links/${id}/archive?format=${format}`;
+  return `${API_PREFIX}/links/${id}/archive?format=${format}`;
+}
+
+export function apiUrl(path: string): string {
+  return `${API_PREFIX}${path}`;
 }
 
 export function faviconSrc(link: LinkRecord): string | null {
   if (link.kind === 'file') return null;
-  if (link.icon) return `/api/favicon?url=${encodeURIComponent(link.icon)}`;
-  if (link.favicon) return `/api/favicon?url=${encodeURIComponent(link.favicon)}`;
+  if (link.icon) return `${API_PREFIX}/favicon?url=${encodeURIComponent(link.icon)}`;
+  if (link.favicon) return `${API_PREFIX}/favicon?url=${encodeURIComponent(link.favicon)}`;
   try {
     const origin = new URL(link.url).origin;
-    return `/api/favicon?url=${encodeURIComponent(`${origin}/favicon.ico`)}`;
+    return `${API_PREFIX}/favicon?url=${encodeURIComponent(`${origin}/favicon.ico`)}`;
   } catch {
     return null;
   }

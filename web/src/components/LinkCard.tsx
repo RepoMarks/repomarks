@@ -138,6 +138,11 @@ export default function LinkCard({
           <h3 className="card-title">
             <Highlight text={link.title} terms={highlight} />
           </h3>
+          {link.snippet && (
+            <p className="card-snippet">
+              <Highlight text={link.snippet} terms={highlight} />
+            </p>
+          )}
           {link.description && (
             <p className="card-desc">
               <Highlight text={link.description} terms={highlight} />

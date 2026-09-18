@@ -1,6 +1,38 @@
+import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import type { DataService } from '../services/service.js';
+import { verifySharePassword, type DataService } from '../services/service.js';
 import { HttpError } from '../util/misc.js';
+import type { Collection } from '../store/types.js';
+
+const SHARE_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+function shareCookieName(slug: string): string {
+  return `rs_${slug}`;
+}
+
+function shareCookieValue(secret: string, collection: Collection): string {
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`${collection.slug}:${collection.passwordHash}`)
+    .digest('hex');
+}
+
+function parseCookies(header: string | undefined): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!header) return result;
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    result[part.slice(0, index).trim()] = decodeURIComponent(part.slice(index + 1).trim());
+  }
+  return result;
+}
+
+function isExpired(collection: Collection): boolean {
+  if (!collection.shareExpiresAt) return false;
+  const time = Date.parse(collection.shareExpiresAt);
+  return !Number.isNaN(time) && time < Date.now();
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -158,14 +190,102 @@ function escapeXml(value: string): string {
   return escapeHtml(value);
 }
 
-export function createPublicRouter(service: DataService): Router {
+function renderPasswordPage(
+  origin: string,
+  slug: string,
+  collection: { name: string },
+  failed: boolean
+): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>${escapeHtml(collection.name)} · RepoMarks</title>
+  <style>${PAGE_STYLE}
+    form { margin-top: 24px; display: flex; gap: 8px; max-width: 360px; }
+    input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #272e3a; background: #161a21; color: #e8ebf1; }
+    button { padding: 10px 16px; border-radius: 8px; border: 0; background: #5b8def; color: #fff; cursor: pointer; }
+    .error { color: #ff9aa6; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>${escapeHtml(collection.name)}</h1>
+      <p>此分享需要密码 · This share is password protected</p>
+      <form method="post" action="${origin}/share/${slug}">
+        <input type="password" name="password" placeholder="密码 / Password" autofocus>
+        <button type="submit">进入 / Enter</button>
+      </form>
+      ${failed ? '<p class="error">密码错误 · Wrong password</p>' : ''}
+    </header>
+  </div>
+</body>
+</html>`;
+}
+
+export function createPublicRouter(service: DataService, secret: string): Router {
   const router = Router();
+
+  const guard = (req: Request, res: Response): 'ok' | 'missing' | 'expired' => {
+    const result = service.findPublicCollection(req.params.slug);
+    if (!result) return 'missing';
+    const { collection } = result;
+    if (isExpired(collection)) return 'expired';
+    if (!collection.passwordHash) return 'ok';
+    const cookies = parseCookies(req.headers.cookie);
+    const value = cookies[shareCookieName(collection.slug ?? '')];
+    return value === shareCookieValue(secret, collection) ? 'ok' : 'missing';
+  };
+
+  router.post(
+    '/share/:slug',
+    handle((req, res) => {
+      const result = service.findPublicCollection(req.params.slug);
+      if (!result || isExpired(result.collection)) {
+        throw new HttpError(404, '分享不存在或未公开');
+      }
+      const { collection } = result;
+      const password = typeof req.body?.password === 'string' ? req.body.password : '';
+      if (
+        !collection.passwordHash ||
+        !verifySharePassword(password, collection.passwordHash)
+      ) {
+        res.status(401);
+        res.setHeader('content-type', 'text/html; charset=utf-8');
+        res.send(renderPasswordPage(baseUrl(req), collection.slug ?? '', collection, true));
+        return;
+      }
+      res.cookie(shareCookieName(collection.slug ?? ''), shareCookieValue(secret, collection), {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: SHARE_COOKIE_MAX_AGE,
+        path: '/',
+      });
+      res.redirect(`${baseUrl(req)}/share/${collection.slug}`);
+    })
+  );
 
   router.get(
     '/share/:slug',
     handle((req, res) => {
       const result = service.findPublicCollection(req.params.slug);
       if (!result) throw new HttpError(404, '分享不存在或未公开');
+      const { collection } = result;
+      if (isExpired(collection)) throw new HttpError(404, '分享已过期或不存在');
+      if (collection.passwordHash) {
+        const cookies = parseCookies(req.headers.cookie);
+        if (
+          cookies[shareCookieName(collection.slug ?? '')] !== shareCookieValue(secret, collection)
+        ) {
+          res.status(401);
+          res.setHeader('content-type', 'text/html; charset=utf-8');
+          res.send(renderPasswordPage(baseUrl(req), collection.slug ?? '', collection, false));
+          return;
+        }
+      }
       const origin = baseUrl(req);
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.setHeader('x-content-type-options', 'nosniff');
@@ -182,6 +302,15 @@ export function createPublicRouter(service: DataService): Router {
       const result = service.findPublicCollection(req.params.slug);
       if (!result) throw new HttpError(404, '分享不存在或未公开');
       const { collection, links } = result;
+      if (isExpired(collection)) throw new HttpError(404, '分享已过期或不存在');
+      if (collection.passwordHash) {
+        const cookies = parseCookies(req.headers.cookie);
+        if (
+          cookies[shareCookieName(collection.slug ?? '')] !== shareCookieValue(secret, collection)
+        ) {
+          throw new HttpError(401, '该分享需要密码');
+        }
+      }
       const origin = baseUrl(req);
       const self = `${origin}/share/${collection.slug}/feed.xml`;
       const items = links
@@ -220,6 +349,19 @@ ${items}
   router.get(
     '/share/:slug/links/:id/archive',
     handle(async (req, res) => {
+      const collectionResult = service.findPublicCollection(req.params.slug);
+      if (!collectionResult || isExpired(collectionResult.collection)) {
+        throw new HttpError(404, '分享不存在或未公开');
+      }
+      if (collectionResult.collection.passwordHash) {
+        const cookies = parseCookies(req.headers.cookie);
+        if (
+          cookies[shareCookieName(collectionResult.collection.slug ?? '')] !==
+          shareCookieValue(secret, collectionResult.collection)
+        ) {
+          throw new HttpError(401, '该分享需要密码');
+        }
+      }
       const link = service.findPublicLink(req.params.slug, req.params.id);
       if (!link) throw new HttpError(404, '分享不存在或未公开');
       const format = (req.query.format as string) ?? 'html';

@@ -101,7 +101,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={{ refreshKey, notifyChange, openMenu: () => undefined }}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />

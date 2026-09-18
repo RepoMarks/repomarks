@@ -1,4 +1,5 @@
 const MENU_ID = 'repomarks-save-page';
+const HIGHLIGHT_MENU_ID = 'repomarks-save-highlight';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -6,36 +7,72 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Save to RepoMarks',
     contexts: ['page', 'link'],
   });
+  chrome.contextMenus.create({
+    id: HIGHLIGHT_MENU_ID,
+    title: 'Save selection as highlight',
+    contexts: ['selection'],
+  });
 });
 
-async function saveLink(payload) {
+async function apiRequest(path, options = {}) {
   const { serverUrl = '', apiKey = '' } = await chrome.storage.sync.get(['serverUrl', 'apiKey']);
   const base = String(serverUrl).trim().replace(/\/+$/, '');
   if (!base || !apiKey) {
-    return { ok: false, error: 'RepoMarks is not configured. Open the extension settings.' };
+    return { ok: false, status: 0, error: 'RepoMarks is not configured. Open the extension settings.' };
   }
   try {
-    const res = await fetch(`${base}/api/links`, {
-      method: 'POST',
+    const res = await fetch(`${base}/api${path}`, {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
+        ...(options.headers || {}),
       },
-      body: JSON.stringify({ ...payload, fetchMetadata: false }),
     });
-    if (res.ok) return { ok: true };
-
-    let detail = `HTTP ${res.status}`;
+    let data = null;
     try {
-      const data = await res.json();
-      if (data && data.error) detail = data.error;
+      data = await res.json();
     } catch {}
-    if (res.status === 409) detail = 'Already saved.';
-    if (res.status === 401) detail = 'Invalid API key.';
-    return { ok: false, error: detail };
+    return { ok: res.ok, status: res.status, data };
   } catch (err) {
-    return { ok: false, error: err.message || 'Network error' };
+    return { ok: false, status: 0, error: err.message || 'Network error' };
   }
+}
+
+async function saveSelectionHighlight(url, text) {
+  if (!text) return;
+  const existing = await apiRequest(`/links/by-url?url=${encodeURIComponent(url)}`);
+  let linkId = existing.ok ? existing.data.id : null;
+  if (!linkId) {
+    const created = await apiRequest('/links', {
+      method: 'POST',
+      body: JSON.stringify({ url, fetchMetadata: false }),
+    });
+    if (!created.ok || !created.data?.id) {
+      notify('RepoMarks', `Could not save the highlight: ${created.data?.error || created.error || created.status}`);
+      return;
+    }
+    linkId = created.data.id;
+  }
+  const result = await apiRequest(`/links/${linkId}/highlights`, {
+    method: 'POST',
+    body: JSON.stringify({ text, color: 'yellow' }),
+  });
+  if (result.ok) notify('RepoMarks', 'Highlight saved.');
+  else notify('RepoMarks', `Could not save the highlight: ${result.data?.error || result.error || result.status}`);
+}
+
+async function saveLink(payload) {
+  const result = await apiRequest('/links', {
+    method: 'POST',
+    body: JSON.stringify({ ...payload, fetchMetadata: false }),
+  });
+  if (result.ok) return { ok: true };
+  let detail = result.error || `HTTP ${result.status}`;
+  if (result.data && result.data.error) detail = result.data.error;
+  if (result.status === 409) detail = 'Already saved.';
+  if (result.status === 401) detail = 'Invalid API key.';
+  return { ok: false, error: detail };
 }
 
 function notify(title, message) {
@@ -53,6 +90,13 @@ async function saveAndNotify(payload) {
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === HIGHLIGHT_MENU_ID) {
+    const url = info.pageUrl || (tab && tab.url);
+    if (url && info.selectionText) {
+      saveSelectionHighlight(url, info.selectionText);
+    }
+    return;
+  }
   if (info.menuItemId !== MENU_ID) return;
 
   if (info.linkUrl) {

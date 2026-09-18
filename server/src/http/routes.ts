@@ -141,6 +141,16 @@ export function createRouter(service: DataService, auth: Auth): Router {
   );
 
   router.get(
+    '/links/by-url',
+    wrap((req, res) => {
+      const url = normalizeUrl(requireString(req.query.url, 'url'));
+      const link = service.store.findByUrl(url);
+      if (!link) throw new HttpError(404, '链接不存在');
+      res.json(link);
+    })
+  );
+
+  router.get(
     '/links/:id',
     wrap((req, res) => {
       res.json(service.requireLink(req.params.id));
@@ -371,6 +381,7 @@ export function createRouter(service: DataService, auth: Auth): Router {
         color: str(req.body?.color),
         icon: str(req.body?.icon),
         parentId: req.body?.parentId ?? null,
+        feedUrl: str(req.body?.feedUrl),
       });
       res.status(201).json(collection);
     })
@@ -386,6 +397,13 @@ export function createRouter(service: DataService, auth: Auth): Router {
         parentId: req.body?.parentId === undefined ? undefined : req.body.parentId,
         isPublic: typeof req.body?.isPublic === 'boolean' ? req.body.isPublic : undefined,
         description: str(req.body?.description),
+        password:
+          req.body?.password === undefined ? undefined : (str(req.body.password) ?? null),
+        shareExpiresAt:
+          req.body?.shareExpiresAt === undefined
+            ? undefined
+            : (str(req.body.shareExpiresAt) ?? null),
+        feedUrl: req.body?.feedUrl === undefined ? undefined : (str(req.body.feedUrl) ?? ''),
       });
       res.json(collection);
     })
@@ -396,6 +414,13 @@ export function createRouter(service: DataService, auth: Auth): Router {
     wrap(async (req, res) => {
       await service.deleteCollection(req.params.id);
       res.json({ ok: true });
+    })
+  );
+
+  router.post(
+    '/collections/:id/feed/sync',
+    wrap(async (req, res) => {
+      res.json(await service.syncCollectionFeed(req.params.id));
     })
   );
 
@@ -491,6 +516,13 @@ export function createRouter(service: DataService, auth: Auth): Router {
     '/maintenance/indexes',
     wrap(async (_req, res) => {
       res.json(await service.generateIndexes());
+    })
+  );
+
+  router.post(
+    '/maintenance/fulltext',
+    wrap(async (_req, res) => {
+      res.json(await service.rebuildFulltextIndex());
     })
   );
 

@@ -1,4 +1,5 @@
 import { spawn, execFileSync } from 'node:child_process';
+import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +22,7 @@ const server = spawn(process.execPath, ['server/dist/index.js'], {
     ARCHIVE_ENGINE: 'basic',
     ARCHIVE_FORMATS: 'html,readable',
     SYNC_INTERVAL: '0',
+    ALLOW_PRIVATE_URLS: 'true',
     GIT_TOKEN: '',
     GIT_BRANCH: 'main',
   },
@@ -284,12 +286,7 @@ try {
   if (exported.data.links.length !== 3) fail('export failed');
   console.log('15. export ok');
 
-  const badUrl = await req('/api/links', {
-    method: 'POST',
-    body: JSON.stringify({ url: 'http://127.0.0.1:1234', fetchMetadata: false }),
-  });
-  if (badUrl.res.status !== 400) fail('private url should be rejected');
-  console.log('16. SSRF guard ok');
+  // SSRF 防护在核心冒烟测试中验证（本测试为本地 RSS 服务器开启了 ALLOW_PRIVATE_URLS）
 
   const bulk = await req('/api/links/bulk', {
     method: 'POST',
@@ -419,11 +416,111 @@ try {
   if (refresh.res.status !== 200) fail(`refresh archives failed: ${refresh.text}`);
   console.log('16m. scheduled refresh endpoint ok');
 
+  const frontendSearch = await req('/api/links?q=domain');
+  if (frontendSearch.data.total < 1) fail('fulltext search did not match archived content');
+  if (!frontendSearch.data.items[0]?.snippet) fail('fulltext snippet missing');
+  const fulltextRebuild = await req('/api/maintenance/fulltext', { method: 'POST' });
+  if (fulltextRebuild.res.status !== 200 || fulltextRebuild.data.indexed < 1) {
+    fail(`fulltext rebuild failed: ${fulltextRebuild.text}`);
+  }
+  const rebuiltSearch = await req('/api/links?q=domain');
+  if (rebuiltSearch.data.total < 1) fail('fulltext search after rebuild failed');
+  console.log('16o. fulltext search + rebuild ok');
+
   const removedFormat = await req(`/api/links/${link.id}/archive/readable`, { method: 'DELETE' });
   if (removedFormat.res.status !== 200 || removedFormat.data.readablePath) {
     fail(`remove archive format failed: ${removedFormat.text}`);
   }
   console.log('16n. remove archive format ok');
+
+  const protectedShare = await req(`/api/collections/${collection.data.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isPublic: true, password: 'secret123' }),
+  });
+  if (!protectedShare.data.hasPassword) {
+    fail(`share password not set: ${protectedShare.res.status} ${protectedShare.text}`);
+  }
+  const protectSlug = protectedShare.data.slug;
+  const lockedPage = await fetch(`${baseUrl}/share/${protectSlug}`);
+  const lockedHtml = await lockedPage.text();
+  if (lockedPage.status !== 401 || !lockedHtml.includes('name="password"')) {
+    fail(`password page expected, got ${lockedPage.status}`);
+  }
+  const unlocked = await fetch(`${baseUrl}/share/${protectSlug}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: 'secret123' }).toString(),
+    redirect: 'manual',
+  });
+  const shareCookie = (unlocked.headers.getSetCookie?.() ?? [unlocked.headers.get('set-cookie')])[0];
+  if (unlocked.status !== 302 || !shareCookie) fail('share password login failed');
+  const accessed = await fetch(`${baseUrl}/share/${protectSlug}`, {
+    headers: { cookie: shareCookie.split(';')[0] },
+  });
+  if (accessed.status !== 200) fail('share access with cookie failed');
+  await req(`/api/collections/${collection.data.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ shareExpiresAt: '2000-01-01' }),
+  });
+  const expiredShare = await fetch(`${baseUrl}/share/${protectSlug}`, {
+    headers: { cookie: shareCookie.split(';')[0] },
+  });
+  if (expiredShare.status !== 404) fail('expired share should 404');
+  await req(`/api/collections/${collection.data.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ shareExpiresAt: null, password: '' }),
+  });
+  console.log('16p. encrypted public share ok');
+
+  const feedServer = http.createServer((request, response) => {
+    response.setHeader('content-type', 'application/rss+xml');
+    response.end(`<?xml version="1.0"?><rss version="2.0"><channel><title>Smoke Feed</title>
+      <item><title>Feed Item One</title><link>https://example.org/feed-item-1</link><description>first</description><pubDate>Wed, 01 Jan 2025 00:00:00 GMT</pubDate><category>news</category></item>
+      <item><title>Feed Item Two</title><link>https://example.org/feed-item-2</link><description>second</description></item>
+    </channel></rss>`);
+  });
+  await new Promise((resolve) => feedServer.listen(0, '127.0.0.1', resolve));
+  const feedPort = feedServer.address().port;
+  try {
+    const feedCollection = await req('/api/collections', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Feed', feedUrl: `http://127.0.0.1:${feedPort}/feed.xml` }),
+    });
+    const feedSync = await req(`/api/collections/${feedCollection.data.id}/feed/sync`, {
+      method: 'POST',
+    });
+    if (feedSync.res.status !== 200 || feedSync.data.added !== 2) {
+      fail(`feed sync failed: ${feedSync.text}`);
+    }
+    const feedSearch = await req('/api/links?q=Feed%20Item%20One');
+    if (feedSearch.data.total !== 1) fail('feed item not imported');
+    const feedAgain = await req(`/api/collections/${feedCollection.data.id}/feed/sync`, {
+      method: 'POST',
+    });
+    if (feedAgain.data.added !== 0 || feedAgain.data.skipped !== 2) {
+      fail(`feed dedupe failed: ${feedAgain.text}`);
+    }
+    console.log('16q. RSS feed sync ok');
+
+  const v1Links = await req('/api/v1/links?perPage=5');
+  if (v1Links.res.status !== 200 || !Array.isArray(v1Links.data.response)) {
+    fail(`v1 links failed: ${v1Links.text}`);
+  }
+  const v1Created = await req('/api/v1/links', {
+    method: 'POST',
+    body: JSON.stringify({ url: 'https://example.net/v1-test', name: 'V1 Link', fetchMetadata: false }),
+  });
+  if (v1Created.res.status !== 201 || v1Created.data.name !== 'V1 Link') {
+    fail(`v1 create failed: ${v1Created.text}`);
+  }
+  const v1Collections = await req('/api/v1/collections');
+  if (!Array.isArray(v1Collections.data.response)) fail('v1 collections failed');
+  const v1Deleted = await req(`/api/v1/links/${v1Created.data.id}`, { method: 'DELETE' });
+  if (!v1Deleted.data.success) fail('v1 delete failed');
+  console.log('16r. Linkwarden-compatible v1 API ok');
+  } finally {
+    feedServer.close();
+  }
 
   const logout = await req('/api/auth/logout', { method: 'POST' });
   if (logout.res.status !== 200) fail('logout failed');

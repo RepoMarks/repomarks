@@ -80,6 +80,16 @@ button:disabled { opacity: 0.6; cursor: default; }
 
 #setup p { margin: 0 0 12px; }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: #5b8def;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  margin-left: 8px;
+}
+
 footer {
   margin-top: 12px;
   padding-top: 10px;

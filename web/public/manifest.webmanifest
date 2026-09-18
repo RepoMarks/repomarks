@@ -2,8 +2,8 @@
   "name": "RepoMarks",
   "short_name": "RepoMarks",
   "description": "Self-hosted bookmark manager backed by your own Git repository",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "share_target": {
     "action": "/share-target",

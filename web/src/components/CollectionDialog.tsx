@@ -25,6 +25,9 @@ export default function CollectionDialog({
   const [icon, setIcon] = useState(collection.icon ?? '');
   const [color, setColor] = useState(collection.color ?? '#5b8def');
   const [isPublic, setIsPublic] = useState(Boolean(collection.isPublic));
+  const [password, setPassword] = useState('');
+  const [shareExpiresAt, setShareExpiresAt] = useState(collection.shareExpiresAt ?? '');
+  const [feedUrl, setFeedUrl] = useState(collection.feedUrl ?? '');
   const [slug, setSlug] = useState(collection.slug ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +46,7 @@ export default function CollectionDialog({
   );
 
   const shareUrl = slug ? `${window.location.origin}/share/${slug}` : '';
-  const feedUrl = slug ? `${window.location.origin}/share/${slug}/feed.xml` : '';
+  const shareFeedUrl = slug ? `${window.location.origin}/share/${slug}/feed.xml` : '';
 
   const copy = async (value: string) => {
     try {
@@ -66,6 +69,9 @@ export default function CollectionDialog({
         color,
         parentId: parentId || null,
         isPublic,
+        shareExpiresAt: shareExpiresAt || null,
+        feedUrl,
+        ...(password ? { password } : {}),
       });
       setSlug(updated.slug ?? '');
       setMessage(t('已保存'));
@@ -191,6 +197,78 @@ export default function CollectionDialog({
         {t('公开分享这个收藏夹（包含子收藏夹）')}
       </label>
 
+      <div className="field">
+        <label>{t('RSS 订阅源')}</label>
+        <div className="share-row">
+          <input
+            type="text"
+            value={feedUrl}
+            placeholder="https://example.com/feed.xml"
+            onChange={(event) => setFeedUrl(event.target.value)}
+          />
+          <button
+            className="btn small"
+            disabled={!collection.feedUrl}
+            onClick={() => {
+              void api
+                .syncFeed(collection.id)
+                .then((result) => {
+                  setMessage(
+                    t('订阅同步完成：新增 {added} 条，跳过 {skipped} 条', {
+                      added: result.added,
+                      skipped: result.skipped,
+                    })
+                  );
+                  onChanged();
+                })
+                .catch((err) => setError((err as Error).message));
+            }}
+          >
+            {t('立即同步订阅')}
+          </button>
+        </div>
+      </div>
+
+      {isPublic && (
+        <>
+          <div className="field">
+            <label>{t('分享密码')}</label>
+            <input
+              type="password"
+              value={password}
+              placeholder={t('密码留空表示不需要密码')}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label>{t('有效期至')}</label>
+            <input
+              type="date"
+              value={shareExpiresAt ? shareExpiresAt.slice(0, 10) : ''}
+              onChange={(event) => setShareExpiresAt(event.target.value)}
+            />
+          </div>
+          {collection.hasPassword && (
+            <button
+              className="btn small danger"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => {
+                void api
+                  .updateCollection(collection.id, { password: '' })
+                  .then(() => {
+                    setPassword('');
+                    setMessage(t('已保存'));
+                    onChanged();
+                  })
+                  .catch((err) => setError((err as Error).message));
+              }}
+            >
+              {t('清除密码')}
+            </button>
+          )}
+        </>
+      )}
+
       {isPublic && shareUrl && (
         <div className="field">
           <label>{t('分享链接')}</label>
@@ -201,8 +279,8 @@ export default function CollectionDialog({
             </button>
           </div>
           <div className="share-row" style={{ marginTop: 8 }}>
-            <input type="text" readOnly value={feedUrl} />
-            <button className="btn small" onClick={() => void copy(feedUrl)}>
+            <input type="text" readOnly value={shareFeedUrl} />
+            <button className="btn small" onClick={() => void copy(shareFeedUrl)}>
               {t('复制 RSS')}
             </button>
           </div>

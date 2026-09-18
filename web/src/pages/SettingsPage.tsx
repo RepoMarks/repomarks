@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, formatBytes, formatDate } from '../api';
+import { api, apiUrl, formatBytes, formatDate } from '../api';
 import { useApp, useMenu } from '../App';
 import { useStatus } from '../hooks';
 import { useI18n } from '../i18n';
@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [keyLabel, setKeyLabel] = useState('');
   const [newKey, setNewKey] = useState<string | null>(null);
   const [indexMessage, setIndexMessage] = useState<string | null>(null);
-  const bookmarklet = `javascript:(function(){window.open('${window.location.origin}/?new='+encodeURIComponent(location.href)+'&newTitle='+encodeURIComponent(document.title),'_blank');})()`;
+  const bookmarklet = `javascript:(function(){window.open('${window.location.origin}${import.meta.env.BASE_URL}?new='+encodeURIComponent(location.href)+'&newTitle='+encodeURIComponent(document.title),'_blank');})()`;
 
   useEffect(() => {
     let alive = true;
@@ -138,10 +138,10 @@ export default function SettingsPage() {
                 {busy && <span className="spinner" />}
                 {t('立即同步')}
               </button>
-              <a className="btn" href="/api/export">
+              <a className="btn" href={apiUrl('/export')}>
                 {t('导出 JSON')}
               </a>
-              <a className="btn" href="/api/export?format=markdown">
+              <a className="btn" href={apiUrl('/export?format=markdown')}>
                 {t('导出 Markdown')}
               </a>
             </div>

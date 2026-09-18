@@ -150,4 +150,20 @@ document.addEventListener('DOMContentLoaded', () => {
   for (const button of document.querySelectorAll('.open-options')) {
     button.addEventListener('click', () => chrome.runtime.openOptionsPage());
   }
+  const sidePanelButton = $('open-side-panel');
+  if (sidePanelButton) {
+    if (!chrome.sidePanel || window.top !== window) {
+      sidePanelButton.hidden = true;
+    } else {
+      sidePanelButton.addEventListener('click', async () => {
+        try {
+          const current = await chrome.windows.getCurrent();
+          await chrome.sidePanel.open({ windowId: current.id });
+          window.close();
+        } catch {
+          sidePanelButton.hidden = true;
+        }
+      });
+    }
+  }
 });

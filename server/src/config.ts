@@ -40,6 +40,7 @@ export interface Config {
   dataDir: string;
   port: number;
   host: string;
+  basePath: string;
   authPassword: string;
   sessionSecret: string;
   shardSize: number;
@@ -55,6 +56,8 @@ export interface Config {
   refreshArchiveDays: number;
   refreshArchiveLimit: number;
   feedSyncIntervalHours: number;
+  fulltextIndex: boolean;
+  fulltextMaxChars: number;
   archiveBrowserPath: string;
   archiveBrowserArgs: string[];
   archiveTimeoutMs: number;
@@ -91,6 +94,12 @@ export function loadConfig(): Config {
     dataDir,
     port: num('PORT', 3000),
     host: str('HOST', '0.0.0.0'),
+    basePath: (() => {
+      const raw = str('BASE_PATH').trim();
+      if (!raw || raw === '/') return '';
+      const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+      return withSlash.replace(/\/+$/, '');
+    })(),
     authPassword,
     sessionSecret:
       str('SESSION_SECRET') ||
@@ -113,6 +122,8 @@ export function loadConfig(): Config {
     refreshArchiveDays: Math.max(0, num('REFRESH_ARCHIVE_DAYS', 0)),
     refreshArchiveLimit: Math.max(1, num('REFRESH_ARCHIVE_LIMIT', 5)),
     feedSyncIntervalHours: Math.max(0, num('FEED_SYNC_INTERVAL_HOURS', 0)),
+    fulltextIndex: bool('FULLTEXT_INDEX', true),
+    fulltextMaxChars: Math.max(500, num('FULLTEXT_MAX_CHARS', 2000)),
     archiveBrowserPath: str('ARCHIVE_BROWSER_PATH'),
     archiveBrowserArgs: str('ARCHIVE_BROWSER_ARGS')
       .split(',')

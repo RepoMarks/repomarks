@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import * as cheerio from 'cheerio';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Config } from '../config.js';
 import { GitRepo, type RepoStatus, type SyncOutcome } from '../git/repo.js';
 import { LinkStore, normalizeTags } from '../store/store.js';
@@ -81,6 +82,21 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function hashSharePassword(password: string): string {
+  const salt = randomBytes(16).toString('hex');
+  const derived = scryptSync(password, salt, 32).toString('hex');
+  return `${salt}:${derived}`;
+}
+
+export function verifySharePassword(password: string, stored: string): boolean {
+  const [salt, digest] = stored.split(':');
+  if (!salt || !digest) return false;
+  const derived = scryptSync(password, salt, 32);
+  const expected = Buffer.from(digest, 'hex');
+  if (derived.length !== expected.length) return false;
+  return timingSafeEqual(derived, expected);
+}
+
 export class DataService {
   readonly store: LinkStore;
   readonly repo: GitRepo;
@@ -98,7 +114,7 @@ export class DataService {
   private startTime = Date.now();
 
   constructor(private config: Config) {
-    this.store = new LinkStore(config.dataDir, config.shardSize);
+    this.store = new LinkStore(config.dataDir, config.shardSize, config.fulltextMaxChars);
     this.repo = new GitRepo({
       dir: config.dataDir,
       remoteUrl: config.repoUrl,
@@ -208,10 +224,14 @@ export class DataService {
     return link;
   }
 
-  listCollections(): Array<Collection & { linkCount: number }> {
+  listCollections(): Array<Collection & { linkCount: number; hasPassword: boolean }> {
     const counts = this.store.collectionCounts();
     return [...this.store.collections.values()]
-      .map((collection) => ({ ...collection, linkCount: counts.get(collection.id) ?? 0 }))
+      .map(({ passwordHash, ...collection }) => ({
+        ...collection,
+        hasPassword: Boolean(passwordHash),
+        linkCount: counts.get(collection.id) ?? 0,
+      }))
       .sort((a, b) => {
         const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
         const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
@@ -842,6 +862,26 @@ export class DataService {
       .slice(0, limit);
   }
 
+  /** 用现有阅读版存档重建全文索引 */
+  async rebuildFulltextIndex(): Promise<{ indexed: number }> {
+    return this.mutex.run(async () => {
+      const entries: Array<[string, string]> = [];
+      for (const link of this.store.links.values()) {
+        if (!link.readablePath) continue;
+        try {
+          const gzipped = await fsp.readFile(this.store.abs(link.readablePath));
+          entries.push([link.id, await gunzipHtml(gzipped)]);
+        } catch {
+          /* 跳过损坏的存档 */
+        }
+      }
+      const paths = await this.store.replaceSearchIndex(entries);
+      await this.repo.commit(paths, `index: rebuild fulltext (${entries.length} links)`);
+      this.schedulePush();
+      return { indexed: entries.length };
+    });
+  }
+
   /** 对超过 maxAgeDays 未更新的存档重新抓取（每次最多 limit 条） */
   async refreshStaleArchives(maxAgeDays: number, limit = 5): Promise<{ refreshed: number }> {
     if (maxAgeDays <= 0) return { refreshed: 0 };
@@ -1158,6 +1198,9 @@ export class DataService {
           await fsp.writeFile(this.store.abs(filePaths.readable), gzipped);
           sizes.readable = gzipped.length;
           written.push(filePaths.readable);
+          if (this.config.fulltextIndex) {
+            written.push(await this.store.appendSearchText(id, readable.text));
+          }
         } catch (err) {
           fail('readable', err);
         }
@@ -1323,6 +1366,7 @@ export class DataService {
     color?: string;
     icon?: string;
     parentId?: string | null;
+    feedUrl?: string;
   }): Promise<Collection> {
     const name = input.name?.trim();
     if (!name) throw new HttpError(400, '收藏夹名称不能为空');
@@ -1342,6 +1386,7 @@ export class DataService {
         isPublic: false,
         slug: '',
         description: '',
+        feedUrl: input.feedUrl?.trim().slice(0, 2000) || '',
         createdAt: now,
         updatedAt: now,
       };
@@ -1362,6 +1407,9 @@ export class DataService {
       parentId?: string | null;
       isPublic?: boolean;
       description?: string;
+      password?: string | null;
+      shareExpiresAt?: string | null;
+      feedUrl?: string;
     }
   ): Promise<Collection> {
     return this.mutex.run(async () => {
@@ -1394,11 +1442,24 @@ export class DataService {
       if (patch.description !== undefined) {
         updated.description = patch.description.slice(0, 1000);
       }
+      if (patch.password !== undefined) {
+        updated.passwordHash =
+          patch.password && patch.password.length > 0
+            ? hashSharePassword(patch.password)
+            : undefined;
+      }
+      if (patch.shareExpiresAt !== undefined) {
+        updated.shareExpiresAt = patch.shareExpiresAt || null;
+      }
+      if (patch.feedUrl !== undefined) {
+        updated.feedUrl = patch.feedUrl.trim().slice(0, 2000);
+      }
       this.store.collections.set(id, updated);
       const changed = await this.store.saveCollections();
       await this.repo.commit(changed, `collection: update ${shorten(updated.name)}`);
       this.schedulePush();
-      return updated;
+      const { passwordHash, ...rest } = updated;
+      return { ...rest, hasPassword: Boolean(passwordHash) };
     });
   }
 
@@ -1549,6 +1610,156 @@ export class DataService {
 
   findPublicLink(slug: string, linkId: string): LinkRecord | null {
     return this.findPublicCollection(slug)?.links.find((link) => link.id === linkId) ?? null;
+  }
+
+  // ---------------------------------------------------------------- RSS 订阅源
+
+  async syncCollectionFeed(
+    id: string
+  ): Promise<{ added: number; skipped: number; title?: string }> {
+    const collection = this.store.collections.get(id);
+    if (!collection) throw new HttpError(404, '收藏夹不存在');
+    const feedUrl = collection.feedUrl?.trim();
+    if (!feedUrl) throw new HttpError(400, '该收藏夹没有配置 RSS 订阅源');
+    const normalized = normalizeUrl(feedUrl);
+    assertAllowedUrl(normalized, this.config.allowPrivateUrls);
+
+    let xml = '';
+    try {
+      const res = await fetch(normalized, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20000),
+        headers: { 'user-agent': USER_AGENT, accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      xml = await res.text();
+    } catch (err) {
+      throw new HttpError(502, `抓取订阅源失败: ${(err as Error).message}`);
+    }
+
+    const $ = cheerio.load(xml, { xmlMode: true });
+    const items: Array<{
+      title: string;
+      url: string;
+      description: string;
+      createdAt: string;
+      tags: string[];
+    }> = [];
+
+    const pushItem = (
+      title: string,
+      link: string,
+      description: string,
+      date: string,
+      categories: string[]
+    ): void => {
+      const trimmed = link?.trim();
+      if (!trimmed || !/^https?:\/\//i.test(trimmed)) return;
+      const parsedDate = date ? new Date(date) : null;
+      items.push({
+        title: (title || trimmed).replace(/\s+/g, ' ').trim().slice(0, 500),
+        url: trimmed,
+        description: description.replace(/\s+/g, ' ').trim().slice(0, 2000),
+        createdAt:
+          parsedDate && !Number.isNaN(parsedDate.getTime())
+            ? parsedDate.toISOString()
+            : new Date().toISOString(),
+        tags: normalizeTags(categories),
+      });
+    };
+
+    $('item').each((_, element) => {
+      const $item = $(element);
+      pushItem(
+        $item.find('title').first().text(),
+        $item.find('link').first().text(),
+        $item.find('description').first().text() || $item.find('content\\:encoded').first().text(),
+        $item.find('pubDate').first().text() || $item.find('dc\\:date').first().text(),
+        $item.find('category').map((__, category) => $(category).text()).get()
+      );
+    });
+    $('entry').each((_, element) => {
+      const $entry = $(element);
+      const link =
+        $entry.find('link[rel="alternate"]').first().attr('href') ??
+        $entry.find('link').first().attr('href') ??
+        '';
+      pushItem(
+        $entry.find('title').first().text(),
+        link,
+        $entry.find('summary').first().text() || $entry.find('content').first().text(),
+        $entry.find('updated').first().text() || $entry.find('published').first().text(),
+        $entry.find('category').map((__, category) => $(category).attr('term') ?? '').get()
+      );
+    });
+
+    if (items.length === 0) {
+      throw new HttpError(400, '订阅源里没有找到条目');
+    }
+    if (items.length > 200) items.length = 200;
+
+    return this.mutex.run(async () => {
+      const seen = new Set<string>();
+      const records: LinkRecord[] = [];
+      let skipped = 0;
+      const now = new Date().toISOString();
+      for (const item of items) {
+        let url: string;
+        try {
+          url = normalizeUrl(item.url);
+        } catch {
+          skipped++;
+          continue;
+        }
+        if (seen.has(url) || this.store.findByUrl(url)) {
+          skipped++;
+          continue;
+        }
+        seen.add(url);
+        records.push({
+          id: ulid(),
+          url,
+          title: item.title,
+          description: item.description,
+          tags: item.tags,
+          collectionId: id,
+          createdAt: item.createdAt,
+          updatedAt: now,
+          siteName: hostnameOf(url),
+          archivedAt: null,
+          archivePath: null,
+          archiveStatus: 'none',
+        });
+      }
+      const paths = new Set<string>();
+      const current = this.store.collections.get(id);
+      if (current) {
+        this.store.collections.set(id, { ...current, feedLastFetchedAt: now, updatedAt: now });
+        for (const path of await this.store.saveCollections()) paths.add(path);
+      }
+      if (records.length > 0) {
+        for (const path of await this.store.addLinksBulk(records)) paths.add(path);
+      }
+      await this.repo.commit([...paths], `feed: sync ${shorten(collection.name)} (+${records.length})`);
+      this.schedulePush();
+      return { added: records.length, skipped, title: $('title').first().text().trim() || undefined };
+    });
+  }
+
+  async syncAllFeeds(): Promise<{ collections: number; added: number }> {
+    const targets = [...this.store.collections.values()].filter(
+      (collection) => collection.feedUrl && collection.feedUrl.trim()
+    );
+    let added = 0;
+    for (const collection of targets) {
+      try {
+        const result = await this.syncCollectionFeed(collection.id);
+        added += result.added;
+      } catch (err) {
+        logger.warn(`RSS 同步失败 ${collection.name}: ${(err as Error).message}`);
+      }
+    }
+    return { collections: targets.length, added };
   }
 
   // ---------------------------------------------------------------- 导入导出
