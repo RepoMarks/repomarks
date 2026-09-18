@@ -52,6 +52,8 @@ if (missing.length > 0) {
 run(['lfs', 'migrate', 'import', '--include=archives/**,files/**', '--everything']);
 
 if (shouldPush) {
+  // migrate 会重写本地跟踪引用，先 fetch 对齐远端再 force-with-lease
+  run(['fetch', 'origin']);
   run(['push', '--force-with-lease', 'origin', 'HEAD']);
   console.log('迁移并强制推送完成：历史已重写，其他克隆需要重新 clone。');
 } else {
